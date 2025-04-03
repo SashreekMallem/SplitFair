@@ -534,10 +534,36 @@ const ProfileScreen: React.FC = () => {
                   </Text>
                 </View>
               </View>
-              
-              <View style={styles.homeInfoRow}>
-                {/* ...more home details... */}
+
+              <View style={styles.homeDetailRow}>
+                <Ionicons name="cash-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
+                  Monthly Rent: ${home.monthly_rent.toFixed(2)}
+                </Text>
               </View>
+
+              <View style={styles.homeDetailRow}>
+                <Ionicons name="shield-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
+                  Security Deposit: ${home.security_deposit.toFixed(2)}
+                </Text>
+              </View>
+
+              <View style={styles.homeDetailRow}>
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
+                  Lease Start: {new Date(home.lease_start_date).toLocaleDateString()}
+                </Text>
+              </View>
+              
+              {home.lease_end_date && (
+                <View style={styles.homeDetailRow}>
+                  <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+                  <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
+                    Lease End: {new Date(home.lease_end_date).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -545,15 +571,68 @@ const ProfileScreen: React.FC = () => {
         {/* Invitation Code */}
         {home && (
           <View style={[styles.inviteCard, { backgroundColor: theme.colors.primary }]}>
-            {/* ...invitation code content... */}
+            <Text style={styles.inviteTitle}>Invite Friends to Join</Text>
+            <View style={styles.inviteCodeContainer}>
+              <Text style={styles.inviteCode}>{home.invitation_code}</Text>
+            </View>
+            <View style={styles.inviteActions}>
+              <TouchableOpacity
+                style={styles.inviteButton}
+                onPress={handleShareInviteCode}
+              >
+                <Ionicons name="share-outline" size={18} color="#fff" />
+                <Text style={styles.inviteButtonText}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.inviteButton}
+                onPress={handleCopyInviteCode}
+              >
+                <Ionicons name="copy-outline" size={18} color="#fff" />
+                <Text style={styles.inviteButtonText}>Copy</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         
         {/* Roommates Section */}
-        <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
-          {/* ...roommates content... */}
-        </View>
-        
+        {roommates.length > 0 && (
+          <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Roommates
+            </Text>
+            
+            {roommates.map((roommate) => (
+              <View key={roommate.id} style={styles.roommateItem}>
+                {roommate.profile_image_url ? (
+                  <Image
+                    source={{ uri: roommate.profile_image_url }}
+                    style={styles.roommateAvatar}
+                  />
+                ) : (
+                  <View style={[styles.roommateInitialsAvatar, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={styles.roommateInitialsText}>
+                      {getInitials(roommate.full_name || 'User')}
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={styles.roommateInfo}>
+                  <Text style={[styles.roommateName, { color: theme.colors.text }]}>
+                    {roommate.full_name}
+                  </Text>
+                  <Text style={[styles.roommateRole, { color: isDarkMode ? '#bbb' : '#666' }]}>
+                    {roommate.role.charAt(0).toUpperCase() + roommate.role.slice(1)}
+                    {roommate.rent_contribution ? ` • $${roommate.rent_contribution}/month` : ''}
+                  </Text>
+                  <Text style={[styles.roommateSince, { color: isDarkMode ? '#bbb' : '#666' }]}>
+                    Member since {new Date(roommate.joined_at).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* App Info */}
         <View style={[styles.infoCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#F5F5F5' }]}>
           <Text style={[styles.infoText, { color: isDarkMode ? '#bbb' : '#666' }]}>
@@ -748,16 +827,99 @@ const styles = StyleSheet.create({
   addressText: {
     fontSize: 14,
   },
-  homeInfoRow: {
+  homeDetailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: 6,
+  },
+  homeDetailText: {
+    fontSize: 14,
+    marginLeft: 8,
   },
   inviteCard: {
     marginHorizontal: 20,
     marginBottom: 24,
     borderRadius: 12,
     padding: 16,
+  },
+  inviteTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  inviteCodeContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inviteCode: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 2,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginHorizontal: 8,
+  },
+  inviteButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  roommateItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  roommateAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  roommateInitialsAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roommateInitialsText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  roommateInfo: {
+    marginLeft: 14,
+    flex: 1,
+  },
+  roommateName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  roommateRole: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  roommateSince: {
+    fontSize: 12,
   },
   infoCard: {
     marginHorizontal: 20,
