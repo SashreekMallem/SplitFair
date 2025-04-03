@@ -104,27 +104,62 @@ export const fetchUserHome = async (userId: string): Promise<HomeDetails | null>
  */
 export const fetchHomeMembers = async (homeId: string, currentUserId: string): Promise<HomeMember[]> => {
   try {
-    const { data, error } = await supabase
+    // Step 1: Get all members of the home except current user (no joins)
+    const { data: memberData, error: memberError } = await supabase
       .from('home_members')
-      .select(`
-        *,
-        user_profiles:user_id(full_name, email, profile_image_url)
-      `)
+      .select('*')  // Simple select without joins
       .eq('home_id', homeId)
       .neq('user_id', currentUserId);
       
-    if (error) {
-      logError(`Error fetching roommates: ${error.message}`);
+    if (memberError) {
+      logError(`Error fetching home members: ${memberError.message}`);
       return [];
     }
     
-    // Process roommate data to flatten structure
-    return data.map((member: any) => ({
-      ...member,
-      full_name: member.user_profiles?.full_name || 'Unknown',
-      email: member.user_profiles?.email || '',
-      profile_image_url: member.user_profiles?.profile_image_url,
-    }));
+    if (!memberData || memberData.length === 0) {
+      return [];
+    }
+    
+    // Step 2: Fetch profile data separately for each member
+    const formattedRoommates: HomeMember[] = [];
+    
+    for (const member of memberData) {
+      try {
+        // Get user profile for this member
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('full_name, email, profile_image_url')
+          .eq('user_id', member.user_id)
+          .single();
+          
+        if (!profileError && profile) {
+          formattedRoommates.push({
+            ...member,
+            full_name: profile.full_name || 'Unknown',
+            email: profile.email || '',
+            profile_image_url: profile.profile_image_url
+          });
+        } else {
+          // Include member even if profile data can't be fetched
+          formattedRoommates.push({
+            ...member,
+            full_name: 'Unknown User',
+            email: '',
+            profile_image_url: null
+          });
+        }
+      } catch (profileFetchError: any) {
+        logError(`Error fetching profile for user ${member.user_id}: ${profileFetchError.message}`);
+        formattedRoommates.push({
+          ...member,
+          full_name: 'Unknown User',
+          email: '',
+          profile_image_url: null
+        });
+      }
+    }
+    
+    return formattedRoommates;
   } catch (error: any) {
     logError(`Unexpected error in fetchHomeMembers: ${error.message}`);
     return [];

@@ -20,56 +20,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../config/supabase';
 import { useNotification } from '../../context/NotificationContext';
 import { BlurView } from 'expo-blur';
 import { logDebug, logError } from '../../utils/DebugHelper';
 import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
+import { fetchUserProfile, updateUserProfile, UserProfile } from '../../services/api/userService';
+import { fetchUserHome, fetchHomeMembers, HomeDetails, HomeMember } from '../../services/api/homeService';
 
 const { width } = Dimensions.get('window');
-
-type UserProfile = {
-  id: string;
-  user_id: string;
-  full_name: string;
-  email: string;
-  profile_image_url?: string;
-  phone_number?: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type HomeDetails = {
-  id: string;
-  name: string;
-  invitation_code: string;
-  street_address: string;
-  unit?: string;
-  city: string;
-  state_province: string;
-  zip_postal_code: string;
-  country: string;
-  monthly_rent: number;
-  security_deposit: number;
-  lease_start_date: string;
-  lease_end_date?: string;
-  created_by: string;
-};
-
-type HomeMember = {
-  id: string;
-  user_id: string;
-  home_id: string;
-  role: string;
-  rent_contribution: number;
-  move_in_date: string;
-  move_out_date?: string;
-  joined_at: string;
-  full_name?: string;
-  email?: string;
-  profile_image_url?: string;
-};
 
 const ProfileScreen: React.FC = () => {
   const { theme, isDarkMode, toggleTheme } = useTheme();
@@ -102,16 +61,11 @@ const ProfileScreen: React.FC = () => {
 
       logDebug('Fetching user profile data');
 
-      // 1. Fetch user profile first
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profileError) {
-        logError(`Profile fetch failed: ${profileError.message}`);
-        throw profileError;
+      // 1. Fetch user profile using service
+      const profileData = await fetchUserProfile(user.id);
+      if (!profileData) {
+        logError('Failed to fetch user profile');
+        throw new Error('Failed to fetch profile');
       }
       
       setProfile(profileData);
@@ -120,86 +74,18 @@ const ProfileScreen: React.FC = () => {
         phone_number: profileData.phone_number || '',
       });
 
-      // 2. Use a simplified approach for fetching home membership to avoid recursion
-      // Filter on the client side instead of using RLS policies with joins
-      const { data: memberships, error: membershipsError } = await supabase
-        .from('home_members')
-        .select('*');
-      
-      if (membershipsError) {
-        logError(`Failed to fetch memberships: ${membershipsError.message}`);
+      // 2. Fetch user's home using service
+      const homeData = await fetchUserHome(user.id);
+      if (!homeData) {
+        logError('No home data found');
         setLoading(false);
         return;
-      }
-      
-      // Client-side filtering
-      const myMembership = memberships.find(m => m.user_id === user.id);
-      if (!myMembership) {
-        logError('No home membership found');
-        setLoading(false);
-        return;
-      }
-
-      // 3. Now fetch the home details
-      const { data: homeData, error: homeError } = await supabase
-        .from('homes')
-        .select('*')
-        .eq('id', myMembership.home_id)
-        .single();
-
-      if (homeError) {
-        logError(`Home fetch failed: ${homeError.message}`);
-        throw homeError;
       }
       setHome(homeData);
 
-      // 4. Fetch roommates - FIXED: Separate queries instead of join
-      try {
-        // First get all members of the home except current user
-        const { data: roommateMembers, error: memberError } = await supabase
-          .from('home_members')
-          .select('*')
-          .eq('home_id', myMembership.home_id)
-          .neq('user_id', user.id);
-
-        if (memberError) {
-          logError(`Error fetching roommate members: ${memberError.message}`);
-          throw memberError;
-        }
-
-        // Now fetch profile data for each member
-        const formattedRoommates = [];
-        for (const member of roommateMembers) {
-          const { data: userProfile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('full_name, email, profile_image_url')
-            .eq('user_id', member.user_id)
-            .single();
-
-          if (!profileError && userProfile) {
-            formattedRoommates.push({
-              ...member,
-              full_name: userProfile.full_name || 'Unknown',
-              email: userProfile.email || '',
-              profile_image_url: userProfile.profile_image_url
-            });
-          } else {
-            // Include member even if profile fetch fails
-            formattedRoommates.push({
-              ...member,
-              full_name: 'Unknown User',
-              email: '',
-              profile_image_url: null
-            });
-          }
-        }
-
-        setRoommates(formattedRoommates);
-        
-      } catch (roomError: any) {
-        logError(`Error fetching roommate details: ${roomError.message}`);
-        // Continue despite roommate fetch error - don't block the whole profile
-      }
+      // 3. Fetch roommates using service
+      const roommatesData = await fetchHomeMembers(homeData.id, user.id);
+      setRoommates(roommatesData);
 
       logDebug('User data fetched successfully');
     } catch (error: any) {
@@ -212,23 +98,20 @@ const ProfileScreen: React.FC = () => {
 
   const handleUpdateProfile = async () => {
     try {
-      if (!profile) return;
+      if (!profile || !user) return;
       setEditing(true);
 
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .update({
-          full_name: editedProfile.full_name,
-          phone_number: editedProfile.phone_number,
-          updated_at: new Date(),
-        })
-        .eq('user_id', user?.id)
-        .select()
-        .single();
+      // Use the service to update profile
+      const updatedProfile = await updateUserProfile(user.id, {
+        full_name: editedProfile.full_name,
+        phone_number: editedProfile.phone_number
+      });
 
-      if (error) throw error;
+      if (!updatedProfile) {
+        throw new Error('Failed to update profile');
+      }
 
-      setProfile(data);
+      setProfile(updatedProfile);
       setEditMode(false);
       showNotification('Success', 'Profile updated successfully', 'success');
     } catch (error: any) {
