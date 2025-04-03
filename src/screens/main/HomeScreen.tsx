@@ -19,6 +19,8 @@ import { useAuth } from '../../context/AuthContext';
 import { BlurView } from 'expo-blur';
 import { logDebug } from '../../utils/DebugHelper';
 import { useNotification } from '../../context/NotificationContext';
+import { useNavigation } from '@react-navigation/native';
+import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,62 +54,105 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [refreshing, setRefreshing] = useState(false);
-  
+  const navigation = useNavigation();
+
+  // Island state management
+  const [islandMode, setIslandMode] = useState<IslandMode>('summary');
+
   // Animation values
   const headerAnimation = useRef(new Animated.Value(0)).current;
-  const sectionsAnimation = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
+  const sectionsAnimation = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ];
 
-  // Start staggered animations for sections
+  // Animation effects
   useEffect(() => {
     logDebug('HomeScreen mounted');
-    
-    // Header animation
+
+    // Run animations on mount
     Animated.timing(headerAnimation, {
       toValue: 1,
       duration: 800,
       useNativeDriver: true,
     }).start();
-    
+
     // Staggered animations for each section
     sectionsAnimation.forEach((anim, index) => {
       Animated.timing(anim, {
         toValue: 1,
         duration: 600,
-        delay: 200 + (index * 150),
+        delay: 200 + index * 150,
         useNativeDriver: true,
       }).start();
     });
-    
+
     return () => {
       logDebug('HomeScreen unmounting');
     };
   }, []);
-  
+
+  // Function to handle island action button presses
+  const handleIslandAction = () => {
+    switch (islandMode) {
+      case 'summary':
+        showNotification('Home Summary', 'Viewing detailed home overview', 'info');
+        break;
+      case 'expenses':
+        showNotification('Payment', 'Processing payment...', 'success');
+        break;
+      case 'tasks':
+        showNotification('Task', 'Task marked as completed', 'success');
+        break;
+      case 'schedule':
+        showNotification('Reminder', 'Rent reminder set for 3 days before due date', 'info');
+        break;
+      case 'alert':
+        showNotification('Payment', 'Resolving overdue payment...', 'warning');
+        break;
+      case 'furniture':
+        showNotification('Furniture', 'Adding new shared item...', 'info');
+        break;
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     logDebug('HomeScreen refreshing');
-    
+
+    // Change island mode when refreshing to demonstrate functionality
+    const modes: IslandMode[] = ['summary', 'expenses', 'tasks', 'schedule', 'alert'];
+    const currentIndex = modes.indexOf(islandMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setIslandMode(modes[nextIndex]);
+
     // Simulate data fetching
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
     showNotification('Updated', 'Your dashboard has been refreshed with the latest data', 'success');
     setRefreshing(false);
   };
 
   const renderExpensesSection = () => {
     return (
-      <Animated.View style={[
-        styles.section,
-        { opacity: sectionsAnimation[0], transform: [{ translateY: sectionsAnimation[0].interpolate({
-          inputRange: [0, 1],
-          outputRange: [20, 0]
-        }) }] }
-      ]}>
+      <Animated.View
+        style={[
+          styles.section,
+          {
+            opacity: sectionsAnimation[0],
+            transform: [
+              {
+                translateY: sectionsAnimation[0].interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
             <View style={[styles.sectionIcon, { backgroundColor: '#546DE5' }]}>
@@ -115,7 +160,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.sectionTitle}>Recent Expenses</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('expenses')}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -123,28 +168,44 @@ const HomeScreen: React.FC = () => {
 
         <View style={styles.expensesContainer}>
           {mockExpenses.map((expense) => (
-            <TouchableOpacity key={expense.id} style={styles.expenseCard}>
+            <TouchableOpacity
+              key={expense.id}
+              style={styles.expenseCard}
+              onPress={() => setIslandMode('expenses')}
+            >
               <View style={styles.expenseIconContainer}>
-                <View style={[styles.expenseIcon, { 
-                  backgroundColor: expense.category === 'utilities' ? '#5D78FF20' : '#FF985520'
-                }]}>
-                  <Ionicons 
-                    name={expense.category === 'utilities' ? 'flash-outline' : 'cart-outline'} 
-                    size={18} 
-                    color={expense.category === 'utilities' ? '#5D78FF' : '#FF9855'} 
+                <View
+                  style={[
+                    styles.expenseIcon,
+                    {
+                      backgroundColor:
+                        expense.category === 'utilities' ? '#5D78FF20' : '#FF985520',
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      expense.category === 'utilities' ? 'flash-outline' : 'cart-outline'
+                    }
+                    size={18}
+                    color={expense.category === 'utilities' ? '#5D78FF' : '#FF9855'}
                   />
                 </View>
               </View>
               <View style={styles.expenseDetails}>
-                <Text style={styles.expenseTitle}>{expense.title}</Text>
-                <Text style={styles.expenseSubtitle}>Paid by {expense.paidBy} · {expense.date}</Text>
+                <Text style={styles.expenseTitle} numberOfLines={1}>
+                  {expense.title}
+                </Text>
+                <Text style={styles.expenseSubtitle} numberOfLines={1}>
+                  Paid by {expense.paidBy} · {expense.date}
+                </Text>
               </View>
               <Text style={styles.expenseAmount}>${expense.amount.toFixed(2)}</Text>
             </TouchableOpacity>
           ))}
         </View>
-        
-        <TouchableOpacity style={styles.addButton}>
+
+        <TouchableOpacity style={styles.addButton} onPress={() => setIslandMode('expenses')}>
           <LinearGradient
             colors={['#3a7bd5', '#546DE5', '#778BEB']}
             start={{ x: 0, y: 0 }}
@@ -161,21 +222,30 @@ const HomeScreen: React.FC = () => {
 
   const renderSanitizationSection = () => {
     return (
-      <Animated.View style={[
-        styles.section,
-        { opacity: sectionsAnimation[1], transform: [{ translateY: sectionsAnimation[1].interpolate({
-          inputRange: [0, 1],
-          outputRange: [20, 0]
-        }) }] }
-      ]}>
+      <Animated.View
+        style={[
+          styles.section,
+          {
+            opacity: sectionsAnimation[1],
+            transform: [
+              {
+                translateY: sectionsAnimation[1].interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
             <View style={[styles.sectionIcon, { backgroundColor: '#20BF6B' }]}>
               <Ionicons name="water-outline" size={20} color="#fff" />
             </View>
-            <Text style={styles.sectionTitle}>Sanitization Tasks</Text>
+            <Text style={styles.sectionTitle}>Sanitization</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('tasks')}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -184,22 +254,46 @@ const HomeScreen: React.FC = () => {
         <View style={styles.taskList}>
           {mockSanitizationTasks.map((task) => (
             <View key={task.id} style={styles.taskItem}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.taskCheckbox, 
-                  task.status === 'completed' && styles.taskCheckboxCompleted
+                  styles.taskCheckbox,
+                  task.status === 'completed' && styles.taskCheckboxCompleted,
                 ]}
+                onPress={() => {
+                  setIslandMode('tasks');
+                  showNotification(
+                    task.status === 'completed' ? 'Task Reopened' : 'Task Completed',
+                    `${task.title} marked as ${
+                      task.status === 'completed' ? 'pending' : 'completed'
+                    }`,
+                    task.status === 'completed' ? 'info' : 'success'
+                  );
+                }}
               >
-                {task.status === 'completed' && <Ionicons name="checkmark" size={16} color="#fff" />}
+                {task.status === 'completed' && (
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                )}
               </TouchableOpacity>
               <View style={styles.taskContent}>
-                <Text style={[
-                  styles.taskTitle,
-                  task.status === 'completed' && styles.taskTitleCompleted
-                ]}>{task.title}</Text>
-                <Text style={styles.taskSubtitle}>Assigned to {task.assignedTo} · Due {task.dueDate}</Text>
+                <Text
+                  style={[
+                    styles.taskTitle,
+                    task.status === 'completed' && styles.taskTitleCompleted,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {task.title}
+                </Text>
+                <Text style={styles.taskSubtitle} numberOfLines={1}>
+                  Assigned to {task.assignedTo} · Due {task.dueDate}
+                </Text>
               </View>
-              <Ionicons name="ellipsis-vertical" size={18} color="#999" />
+              <TouchableOpacity
+                onPress={() => setIslandMode('tasks')}
+                style={styles.taskMenuButton}
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color="#999" />
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -209,43 +303,107 @@ const HomeScreen: React.FC = () => {
 
   const renderScheduleSection = () => {
     return (
-      <Animated.View style={[
-        styles.section,
-        { opacity: sectionsAnimation[2], transform: [{ translateY: sectionsAnimation[2].interpolate({
-          inputRange: [0, 1],
-          outputRange: [20, 0]
-        }) }] }
-      ]}>
+      <Animated.View
+        style={[
+          styles.section,
+          {
+            opacity: sectionsAnimation[2],
+            transform: [
+              {
+                translateY: sectionsAnimation[2].interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
             <View style={[styles.sectionIcon, { backgroundColor: '#F0932B' }]}>
               <Ionicons name="calendar-outline" size={20} color="#fff" />
             </View>
-            <Text style={styles.sectionTitle}>Upcoming Schedule</Text>
+            <Text style={styles.sectionTitle}>Schedule</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('schedule')}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           horizontal={true}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scheduleContainer}
+          decelerationRate="fast"
+          snapToInterval={160 + 10}
+          snapToAlignment="center"
         >
           {mockScheduledTasks.map((event) => (
-            <TouchableOpacity key={event.id} style={styles.scheduleCard}>
-              <View style={[styles.scheduleHeader, { backgroundColor: event.title.includes('Rent') ? '#FF636320' : '#546DE520' }]}>
-                <Text style={[styles.scheduleDate, { color: event.title.includes('Rent') ? '#FF6363' : '#546DE5' }]}>{event.date}</Text>
+            <TouchableOpacity
+              key={event.id}
+              style={styles.scheduleCard}
+              onPress={() => {
+                if (event.title.includes('Rent')) {
+                  setIslandMode('alert');
+                } else {
+                  setIslandMode('schedule');
+                }
+              }}
+              activeOpacity={0.9}
+            >
+              <View
+                style={[
+                  styles.scheduleHeader,
+                  {
+                    backgroundColor: event.title.includes('Rent')
+                      ? '#FF636320'
+                      : event.title.includes('Meeting')
+                      ? '#546DE520'
+                      : '#20BF6B20',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scheduleDate,
+                    {
+                      color: event.title.includes('Rent')
+                        ? '#FF6363'
+                        : event.title.includes('Meeting')
+                        ? '#546DE5'
+                        : '#20BF6B',
+                    },
+                  ]}
+                >
+                  {event.date}
+                </Text>
               </View>
               <View style={styles.scheduleBody}>
-                <Text style={styles.scheduleTitle}>{event.title}</Text>
+                <Text style={styles.scheduleTitle} numberOfLines={2} ellipsizeMode="tail">
+                  {event.title}
+                </Text>
                 <Text style={styles.scheduleTime}>{event.time}</Text>
-                <Text style={styles.scheduleCreator}>Added by {event.createdBy}</Text>
+                <Text style={styles.scheduleCreator} numberOfLines={1}>
+                  Added by {event.createdBy}
+                </Text>
               </View>
             </TouchableOpacity>
           ))}
+
+          <TouchableOpacity
+            style={styles.scheduleAddCard}
+            onPress={() => setIslandMode('schedule')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.scheduleAddContent}>
+              <View style={styles.scheduleAddIconCircle}>
+                <Ionicons name="add" size={28} color="#546DE5" />
+              </View>
+              <Text style={styles.scheduleAddText}>New Event</Text>
+            </View>
+          </TouchableOpacity>
         </ScrollView>
       </Animated.View>
     );
@@ -253,21 +411,30 @@ const HomeScreen: React.FC = () => {
 
   const renderFurnitureSection = () => {
     return (
-      <Animated.View style={[
-        styles.section,
-        { opacity: sectionsAnimation[3], transform: [{ translateY: sectionsAnimation[3].interpolate({
-          inputRange: [0, 1],
-          outputRange: [20, 0]
-        }) }] }
-      ]}>
+      <Animated.View
+        style={[
+          styles.section,
+          {
+            opacity: sectionsAnimation[3],
+            transform: [
+              {
+                translateY: sectionsAnimation[3].interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
             <View style={[styles.sectionIcon, { backgroundColor: '#9B59B6' }]}>
-              <Ionicons name="home-outline" size={20} color="#fff" />
+              <Ionicons name="cube-outline" size={20} color="#fff" />
             </View>
             <Text style={styles.sectionTitle}>My Furniture</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('furniture')}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -275,20 +442,34 @@ const HomeScreen: React.FC = () => {
 
         <View style={styles.furnitureList}>
           {mockFurniture.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.furnitureCard}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.furnitureCard}
+              onPress={() => setIslandMode('furniture')}
+              activeOpacity={0.7}
+            >
               <View style={styles.furnitureImageContainer}>
                 <View style={styles.furniturePlaceholder}>
-                  <Ionicons 
-                    name={item.title.includes('Couch') ? 'bed-outline' : 
-                           item.title.includes('Table') ? 'restaurant-outline' : 'cafe-outline'} 
-                    size={28} 
-                    color="#aaa" 
+                  <Ionicons
+                    name={
+                      item.title.includes('Couch')
+                        ? 'bed-outline'
+                        : item.title.includes('Table')
+                        ? 'restaurant-outline'
+                        : 'cafe-outline'
+                    }
+                    size={28}
+                    color="#aaa"
                   />
                 </View>
               </View>
               <View style={styles.furnitureContent}>
-                <Text style={styles.furnitureTitle}>{item.title}</Text>
-                <Text style={styles.furnitureOwner}>Owner: {item.owner}</Text>
+                <Text style={styles.furnitureTitle} numberOfLines={1} ellipsizeMode="tail">
+                  {item.title}
+                </Text>
+                <Text style={styles.furnitureOwner} numberOfLines={1} ellipsizeMode="tail">
+                  Owner: {item.owner}
+                </Text>
                 <Text style={styles.furnitureValue}>${item.value}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#ccc" />
@@ -307,9 +488,21 @@ const HomeScreen: React.FC = () => {
         end={{ x: 0, y: 0.6 }}
         style={styles.headerGradient}
       />
-      
+
       <StatusBar style="auto" />
-      
+
+      <HomeIsland 
+        mode={islandMode} 
+        onModeChange={setIslandMode} 
+        onActionPress={handleIslandAction} 
+        data={{
+          expenses: mockExpenses,
+          tasks: mockSanitizationTasks,
+          events: mockScheduledTasks,
+          furniture: mockFurniture
+        }}
+      />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -322,31 +515,40 @@ const HomeScreen: React.FC = () => {
           />
         }
       >
-        <Animated.View style={[
-          styles.header, 
-          { 
-            opacity: headerAnimation,
-            transform: [
-              { translateY: headerAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-30, 0]
-              })}
-            ]
-          }
-        ]}>
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: headerAnimation,
+              transform: [
+                {
+                  translateY: headerAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-30, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <View>
             <Text style={styles.welcomeText}>Welcome back,</Text>
             <Text style={styles.userName}>{user?.user_metadata?.full_name || 'Roommate'}</Text>
           </View>
-          <TouchableOpacity style={styles.profileButton}>
+          <TouchableOpacity style={styles.profileButton} onPress={() => setIslandMode('summary')}>
             <View style={styles.profileImageContainer}>
-              <Text style={styles.profileInitial}>{(user?.user_metadata?.full_name?.[0] || 'U').toUpperCase()}</Text>
+              <Text style={styles.profileInitial}>
+                {(user?.user_metadata?.full_name?.[0] || 'U').toUpperCase()}
+              </Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
 
         <View style={styles.insightCards}>
-          <TouchableOpacity style={[styles.insightCard, styles.primaryInsightCard]}>
+          <TouchableOpacity
+            style={[styles.insightCard, styles.primaryInsightCard]}
+            onPress={() => setIslandMode('expenses')}
+          >
             <LinearGradient
               colors={['#546DE5', '#778BEB']}
               start={{ x: 0, y: 0 }}
@@ -355,21 +557,23 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.insightCardContent}>
                 <Ionicons name="cash-outline" size={28} color="#fff" />
-                <Text style={styles.insightCardLabel}>You owe</Text>
-                <Text style={styles.insightCardValue}>$124.50</Text>
+                <Text style={[styles.insightCardLabel, { color: 'rgba(255,255,255,0.8)' }]}>
+                  You owe
+                </Text>
+                <Text style={[styles.insightCardValue, { color: '#fff' }]}>$124.50</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.insightCard}>
+
+          <TouchableOpacity style={styles.insightCard} onPress={() => setIslandMode('expenses')}>
             <View style={styles.insightCardContent}>
               <Ionicons name="arrow-down-outline" size={28} color="#20BF6B" />
               <Text style={styles.insightCardLabel}>You're owed</Text>
               <Text style={styles.insightCardValue}>$215.75</Text>
             </View>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.insightCard}>
+
+          <TouchableOpacity style={styles.insightCard} onPress={() => setIslandMode('alert')}>
             <View style={styles.insightCardContent}>
               <Ionicons name="calendar-outline" size={28} color="#546DE5" />
               <Text style={styles.insightCardLabel}>Rent due in</Text>
@@ -399,7 +603,7 @@ const styles = StyleSheet.create({
     height: height * 0.25,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 120 : 100,
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
@@ -528,6 +732,8 @@ const styles = StyleSheet.create({
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
+    paddingLeft: 12,
   },
   seeAllText: {
     fontSize: 14,
@@ -557,6 +763,8 @@ const styles = StyleSheet.create({
   },
   expenseDetails: {
     flex: 1,
+    justifyContent: 'center',
+    marginRight: 8,
   },
   expenseTitle: {
     fontSize: 15,
@@ -572,6 +780,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    minWidth: 60,
+    textAlign: 'right',
   },
   addButton: {
     height: 48,
@@ -616,6 +826,7 @@ const styles = StyleSheet.create({
   },
   taskContent: {
     flex: 1,
+    paddingRight: 12,
   },
   taskTitle: {
     fontSize: 15,
@@ -631,13 +842,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#888',
   },
+  taskMenuButton: {
+    padding: 6,
+  },
   scheduleContainer: {
-    paddingRight: 20,
+    paddingRight: 10,
   },
   scheduleCard: {
     width: 160,
     height: 160,
-    marginRight: 16,
+    marginRight: 10,
     borderRadius: 16,
     backgroundColor: '#fff',
     overflow: 'hidden',
@@ -649,6 +863,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  scheduleAddCard: {
+    width: 160,
+    height: 160,
+    marginRight: 10,
+    borderRadius: 16,
+    backgroundColor: '#f9f9f9',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scheduleAddContent: {
+    alignItems: 'center',
+  },
+  scheduleAddIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(84, 109, 229, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  scheduleAddText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#546DE5',
   },
   scheduleHeader: {
     padding: 12,
@@ -670,6 +913,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 6,
     textAlign: 'center',
+    height: 40,
   },
   scheduleTime: {
     fontSize: 14,
@@ -680,8 +924,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
   },
-  furnitureList: {
-  },
+  furnitureList: {},
   furnitureCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,6 +945,7 @@ const styles = StyleSheet.create({
   },
   furnitureContent: {
     flex: 1,
+    paddingRight: 12,
   },
   furnitureTitle: {
     fontSize: 15,
