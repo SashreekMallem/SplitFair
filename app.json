@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "SplitFair",
+    "slug": "splitfair",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "backgroundColor": "#ffffff"
+    },
+    "web": {},
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "newArchEnabled": true
+  }
+}
