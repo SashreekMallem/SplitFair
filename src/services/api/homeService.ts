@@ -33,23 +33,54 @@ export type HomeMember = {
 };
 
 /**
+ * Fetches home membership for a user with retry using RPC
+ */
+export const fetchUserHomeMembership = async (userId: string): Promise<any | null> => {
+  try {
+    // First attempt: Try direct fetch 
+    const { data, error } = await supabase.rpc('get_user_home_membership', { 
+      user_id_param: userId 
+    });
+    
+    if (error || !data) {
+      logError(`Error with RPC fetch: ${error?.message}`);
+      
+      // Fallback: Try direct fetch with limited columns and filtering client-side
+      const { data: membersData, error: membersError } = await supabase
+        .from('home_members')
+        .select('id, home_id, role, rent_contribution, move_in_date')
+        .limit(10);
+        
+      if (membersError) {
+        logError(`Fallback query failed: ${membersError.message}`);
+        return null;
+      }
+      
+      // Filter client-side to avoid policy issues
+      const memberData = membersData.find(m => m.user_id === userId);
+      return memberData || null;
+    }
+    
+    return data;
+  } catch (error: any) {
+    logError(`Unexpected error in fetchUserHomeMembership: ${error.message}`);
+    return null;
+  }
+};
+
+/**
  * Fetches home details for a specific user
  */
 export const fetchUserHome = async (userId: string): Promise<HomeDetails | null> => {
   try {
-    // First get user's home membership
-    const { data: memberData, error: memberError } = await supabase
-      .from('home_members')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-      
-    if (memberError) {
-      logError(`Error fetching home membership: ${memberError.message}`);
+    // Get the membership first with the safer approach
+    const memberData = await fetchUserHomeMembership(userId);
+    if (!memberData || !memberData.home_id) {
+      logError('No home membership found');
       return null;
     }
     
-    // Then fetch the home details
+    // Then fetch home details using the home_id
     const { data: homeData, error: homeError } = await supabase
       .from('homes')
       .select('*')
@@ -125,4 +156,45 @@ export const updateHomeDetails = async (
     logError(`Unexpected error in updateHomeDetails: ${error.message}`);
     return null;
   }
+};
+
+/**
+ * Direct fetch that will likely trigger the recursion error for diagnostic purposes
+ */
+export const testDirectHomeMembershipFetch = async (userId: string) => {
+  logDebug('DIAGNOSTIC TEST: Direct home_members query');
+  
+  const { data, error } = await supabase
+    .from('home_members')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+    
+  if (error) {
+    logError(`DIAGNOSTIC RESULT: ${error.message}`);
+    return { error };
+  }
+  
+  return { data };
+};
+
+/**
+ * Alternative fetch using a specific ID approach that might avoid recursion
+ */
+export const testAlternativeMembershipFetch = async (userId: string) => {
+  logDebug('DIAGNOSTIC TEST: Alternative query approach');
+  
+  // Try with exact column names to avoid any policy recursion
+  const { data, error } = await supabase
+    .from('home_members')
+    .select('id, home_id, user_id, role')
+    .filter('user_id', 'eq', userId)
+    .limit(1);
+    
+  if (error) {
+    logError(`DIAGNOSTIC RESULT: ${error.message}`);
+    return { error };
+  }
+  
+  return { data: data?.[0] };
 };

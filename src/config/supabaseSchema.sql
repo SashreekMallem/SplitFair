@@ -142,6 +142,7 @@ drop policy if exists "View homes created by user" on public.homes;
 drop policy if exists "View homes as member" on public.homes;
 drop policy if exists "Update own homes" on public.homes;
 drop policy if exists "Delete own homes" on public.homes;
+drop policy if exists "Users can view any home they're associated with" on public.homes;
 
 -- Drop the problematic policy causing infinite recursion
 drop policy if exists "View homes as member" on public.homes;
@@ -188,29 +189,36 @@ create policy "Delete own homes"
 drop policy if exists "Users can view members in their homes" on public.home_members;
 drop policy if exists "Users can add themselves to homes" on public.home_members;
 drop policy if exists "Users can update own membership" on public.home_members;
+drop policy if exists "View home members" on public.home_members;
+drop policy if exists "View home members simple" on public.home_members;
+drop policy if exists "Home owners can view all members" on public.home_members;
+drop policy if exists "Insert home membership" on public.home_members;
 
--- Create fixed policies
-create policy "Users can view members in their homes"
+-- Create a much simpler policy that avoids recursion
+-- This policy only checks user_id directly without complex EXISTS clauses
+create policy "View home members simple" 
+  on public.home_members for select
+  using (auth.uid() = user_id);
+
+-- Separate policy for admin/owner access that avoids joins
+create policy "Home owners can view all members"
   on public.home_members for select
   using (
-    exists (
+    EXISTS (
       select 1 from public.homes
-      where homes.id = home_members.home_id
-      and homes.created_by = auth.uid()
+      where id = home_id AND created_by = auth.uid()
     )
-    OR
-    auth.uid() = user_id
   );
 
-create policy "Users can add themselves to homes"
+-- Replace the insert policy with a simpler version
+create policy "Insert home membership"
   on public.home_members for insert
   with check (
-    auth.uid() = user_id 
-    OR 
-    exists (
+    auth.uid() = user_id
+    OR
+    EXISTS (
       select 1 from public.homes
-      where homes.id = home_members.home_id
-      and homes.created_by = auth.uid()
+      where id = home_id AND created_by = auth.uid()
     )
   );
 

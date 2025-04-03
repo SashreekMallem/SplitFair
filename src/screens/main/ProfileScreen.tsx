@@ -102,63 +102,108 @@ const ProfileScreen: React.FC = () => {
 
       logDebug('Fetching user profile data');
 
+      // 1. Fetch user profile first
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        logError(`Profile fetch failed: ${profileError.message}`);
+        throw profileError;
+      }
+      
       setProfile(profileData);
       setEditedProfile({
         full_name: profileData.full_name,
         phone_number: profileData.phone_number || '',
       });
 
-      const { data: memberData, error: memberError } = await supabase
+      // 2. Use a simplified approach for fetching home membership to avoid recursion
+      // Filter on the client side instead of using RLS policies with joins
+      const { data: memberships, error: membershipsError } = await supabase
         .from('home_members')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (memberError) {
-        logError(`Error fetching home membership: ${memberError.message}`);
+        .select('*');
+      
+      if (membershipsError) {
+        logError(`Failed to fetch memberships: ${membershipsError.message}`);
+        setLoading(false);
+        return;
+      }
+      
+      // Client-side filtering
+      const myMembership = memberships.find(m => m.user_id === user.id);
+      if (!myMembership) {
+        logError('No home membership found');
         setLoading(false);
         return;
       }
 
+      // 3. Now fetch the home details
       const { data: homeData, error: homeError } = await supabase
         .from('homes')
         .select('*')
-        .eq('id', memberData.home_id)
+        .eq('id', myMembership.home_id)
         .single();
 
-      if (homeError) throw homeError;
+      if (homeError) {
+        logError(`Home fetch failed: ${homeError.message}`);
+        throw homeError;
+      }
       setHome(homeData);
 
-      const { data: roommatesData, error: roommatesError } = await supabase
-        .from('home_members')
-        .select(`
-          *,
-          user_profiles:user_id(full_name, email, profile_image_url)
-        `)
-        .eq('home_id', homeData.id)
-        .neq('user_id', user.id);
+      // 4. Fetch roommates - FIXED: Separate queries instead of join
+      try {
+        // First get all members of the home except current user
+        const { data: roommateMembers, error: memberError } = await supabase
+          .from('home_members')
+          .select('*')
+          .eq('home_id', myMembership.home_id)
+          .neq('user_id', user.id);
 
-      if (roommatesError) throw roommatesError;
+        if (memberError) {
+          logError(`Error fetching roommate members: ${memberError.message}`);
+          throw memberError;
+        }
 
-      const formattedRoommates = roommatesData.map((member: any) => ({
-        ...member,
-        full_name: member.user_profiles?.full_name || 'Unknown',
-        email: member.user_profiles?.email || '',
-        profile_image_url: member.user_profiles?.profile_image_url,
-      }));
+        // Now fetch profile data for each member
+        const formattedRoommates = [];
+        for (const member of roommateMembers) {
+          const { data: userProfile, error: profileError } = await supabase
+            .from('user_profiles')
+            .select('full_name, email, profile_image_url')
+            .eq('user_id', member.user_id)
+            .single();
 
-      setRoommates(formattedRoommates);
+          if (!profileError && userProfile) {
+            formattedRoommates.push({
+              ...member,
+              full_name: userProfile.full_name || 'Unknown',
+              email: userProfile.email || '',
+              profile_image_url: userProfile.profile_image_url
+            });
+          } else {
+            // Include member even if profile fetch fails
+            formattedRoommates.push({
+              ...member,
+              full_name: 'Unknown User',
+              email: '',
+              profile_image_url: null
+            });
+          }
+        }
+
+        setRoommates(formattedRoommates);
+        
+      } catch (roomError: any) {
+        logError(`Error fetching roommate details: ${roomError.message}`);
+        // Continue despite roommate fetch error - don't block the whole profile
+      }
 
       logDebug('User data fetched successfully');
     } catch (error: any) {
-      logError(`Error fetching user data: ${error.message}`);
+      logError(`Error in profile data fetch: ${error.message}`);
       showNotification('Error', error.message, 'error');
     } finally {
       setLoading(false);
@@ -358,12 +403,174 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Existing profile content */}
-        {/* Profile card, home details, invitation code, roommates sections */}
+        {/* Profile Card */}
+        <View style={[styles.profileCard, { backgroundColor: theme.colors.card }]}>
+          {/* Profile header with avatar */}
+          <View style={styles.profileHeader}>
+            <View style={[
+              styles.avatarContainer, 
+              { borderColor: theme.colors.primary }
+            ]}>
+              {profile?.profile_image_url ? (
+                <Image
+                  source={{ uri: profile.profile_image_url }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <View style={[styles.initialsAvatar, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={styles.initialsText}>
+                    {getInitials(profile?.full_name || 'User')}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.profileInfo}>
+              {editMode ? (
+                <TextInput
+                  style={[styles.nameInput, { color: theme.colors.text }]}
+                  value={editedProfile.full_name}
+                  onChangeText={(text) => setEditedProfile(prev => ({ ...prev, full_name: text }))}
+                  placeholder="Your name"
+                  placeholderTextColor="#999"
+                />
+              ) : (
+                <Text style={[styles.profileName, { color: theme.colors.text }]}>
+                  {profile?.full_name || 'User'}
+                </Text>
+              )}
+              
+              <Text style={[styles.profileEmail, { color: isDarkMode ? '#bbb' : '#666' }]}>
+                {profile?.email || user?.email || 'No email'}
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => {
+                if (editMode) {
+                  handleUpdateProfile();
+                } else {
+                  setEditMode(true);
+                }
+              }}
+              disabled={editing}
+            >
+              {editing ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <Ionicons
+                  name={editMode ? "checkmark" : "pencil-outline"}
+                  size={20}
+                  color={theme.colors.primary}
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+          
+          {/* Profile details */}
+          <View style={styles.profileDetails}>
+            <View style={styles.detailItem}>
+              <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
+              {editMode ? (
+                <TextInput
+                  style={[styles.detailInput, { color: theme.colors.text }]}
+                  value={editedProfile.phone_number}
+                  onChangeText={(text) => setEditedProfile(prev => ({ ...prev, phone_number: text }))}
+                  placeholder="Your phone number"
+                  placeholderTextColor="#999"
+                  keyboardType="phone-pad"
+                />
+              ) : (
+                <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                  {profile?.phone_number || 'No phone number'}
+                </Text>
+              )}
+            </View>
+            
+            <View style={styles.detailItem}>
+              <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
+              <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                Joined {new Date(profile?.created_at || '').toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* Home Information */}
+        {home && (
+          <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Home Details
+            </Text>
+            
+            <View style={styles.homeDetails}>
+              <View style={styles.homeTitleRow}>
+                <Text style={[styles.homeTitle, { color: theme.colors.text }]}>
+                  {home.name}
+                </Text>
+                
+                <TouchableOpacity
+                  style={styles.editHomeButton}
+                  onPress={() => {
+                    showNotification('Coming Soon', 'Home editing will be available soon', 'info');
+                  }}
+                >
+                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.addressContainer}>
+                <Ionicons name="location-outline" size={20} color={theme.colors.primary} />
+                <View style={styles.addressDetails}>
+                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
+                    {home.street_address}{home.unit ? `, ${home.unit}` : ''}
+                  </Text>
+                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
+                    {home.city}, {home.state_province} {home.zip_postal_code}
+                  </Text>
+                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
+                    {home.country}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.homeInfoRow}>
+                {/* ...more home details... */}
+              </View>
+            </View>
+          </View>
+        )}
+        
+        {/* Invitation Code */}
+        {home && (
+          <View style={[styles.inviteCard, { backgroundColor: theme.colors.primary }]}>
+            {/* ...invitation code content... */}
+          </View>
+        )}
+        
+        {/* Roommates Section */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
+          {/* ...roommates content... */}
+        </View>
+        
+        {/* App Info */}
+        <View style={[styles.infoCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#F5F5F5' }]}>
+          <Text style={[styles.infoText, { color: isDarkMode ? '#bbb' : '#666' }]}>
+            SplitFair v1.0.0
+          </Text>
+        </View>
       </ScrollView>
-
+      
       {/* Invite Modal */}
-      {/* Existing invite modal code */}
+      <Modal
+        visible={inviteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInviteModalVisible(false)}
+      >
+        {/* ...modal content... */}
+      </Modal>
     </View>
   );
 };
@@ -423,6 +630,144 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     padding: 8,
+  },
+  profileCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+  },
+  initialsAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  initialsText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  profileInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  profileEmail: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  editButton: {
+    padding: 8,
+  },
+  profileDetails: {
+    marginTop: 16,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailText: {
+    marginLeft: 8,
+    fontSize: 16,
+  },
+  detailInput: {
+    marginLeft: 8,
+    fontSize: 16,
+    flex: 1,
+  },
+  sectionCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  homeDetails: {
+    marginTop: 8,
+  },
+  homeTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  homeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  editHomeButton: {
+    padding: 4,
+  },
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addressDetails: {
+    marginLeft: 8,
+  },
+  addressText: {
+    fontSize: 14,
+  },
+  homeInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  inviteCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
+  },
+  infoCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
+  },
+  infoText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
 
