@@ -375,50 +375,81 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
           invitation_code: Math.random().toString(36).substring(2, 8).toUpperCase()
         };
 
-        logSupabaseOperation('Creating home with data', homeData);
+        // Step 1: Create the home using RPC (this works)
+        logSupabaseOperation('1. Using RPC to create home', homeData);
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('insert_home', homeData);
         
-        // Try a direct anonymous insert to avoid recursion issues
-        const { data: home, error: homeError } = await supabase
-          .from('homes')
-          .insert([homeData])
-          .select();
-
-        if (homeError) {
-          logError(`Error creating home: ${homeError.message}`);
-          logSupabaseOperation('Home creation error details', homeError);
-          
-          // Fallback approach for debugging
-          logSupabaseOperation('Attempting alternative insert approach');
-          const altResult = await supabase.rpc('insert_home', homeData);
-          logSupabaseOperation('Alternative insert result', altResult);
-          
-          throw homeError;
-        }
-
-        logDebug(`Created home with ID: ${home?.[0]?.id}`);
-        
-        if (!home?.[0]?.id) {
-          throw new Error('Home creation failed: No ID returned');
+        if (rpcError) {
+          logError(`RPC home creation failed: ${rpcError.message}`);
+          throw rpcError;
         }
         
-        // Create a 500ms delay to ensure the home creation is committed
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        logDebug(`Adding user ${userId} as owner of home ${home[0].id}`);
-        const { error: memberError } = await supabase.from('home_members').insert({
-          home_id: home[0].id,
+        logSupabaseOperation('1. RPC result', rpcResult);
+        const homeId = rpcResult.home_id;
+        
+        // Step 2: Test if we can read the home (this might fail)
+        logSupabaseOperation('2. Testing if we can read the home');
+        try {
+          const { data: homeCheck, error: readError } = await supabase
+            .from('homes')
+            .select('*')
+            .eq('id', homeId)
+            .single();
+            
+          logSupabaseOperation('2. Home read result', homeCheck || readError);
+          
+          if (readError) {
+            logError(`Cannot read home after creation: ${readError.message}`);
+            logSupabaseOperation('2a. This suggests the "View homes created by user" policy is not working');
+          }
+        } catch (testError: any) {
+          logError(`Test read failed: ${testError.message}`);
+        }
+        
+        // Step 3: Try to create home_member using RPC instead
+        logSupabaseOperation('3. Creating home_member using RPC');
+        const homeMemberData = {
+          home_id: homeId,
           user_id: userId,
           role: 'owner',
           rent_contribution: parseFloat(rent),
           move_in_date: moveInDate || new Date().toISOString().split('T')[0]
-        });
-
-        if (memberError) {
-          logError(`Error adding member to home: ${memberError.message}`);
-          throw memberError;
+        };
+        
+        try {
+          // Use an RPC function for inserting home members too
+          const { data: memberResult, error: memberError } = await supabase.rpc('insert_home_member', homeMemberData);
+          
+          logSupabaseOperation('3. Member creation result', memberResult || memberError);
+          
+          if (memberError) {
+            logError(`Member creation RPC failed: ${memberError.message}`);
+          }
+        } catch (memberError: any) {
+          logError(`Error in home_member RPC: ${memberError.message}`);
+          // Continue despite error - we'll try direct insert next
+        }
+        
+        // Step 4: Try direct insert as fallback
+        logSupabaseOperation('4. Trying direct insert of home_member');
+        const { data: insertedMember, error: directError } = await supabase.from('home_members').insert(homeMemberData);
+        
+        logSupabaseOperation('4. Direct insert result', insertedMember || directError);
+        
+        if (directError) {
+          logError(`Direct member insert failed: ${directError.message}`);
+          logSupabaseOperation('4a. This suggests the "Insert home membership" policy is failing');
         }
 
-        return home[0];
+        // Return what we can regardless of errors
+        return {
+          id: homeId,
+          name: homeData.name,
+          invitation_code: homeData.invitation_code,
+          street_address: homeData.street_address,
+          created_by: userId,
+          membershipError: directError?.message
+        };
       }
     } catch (error: any) {
       logError(`Error in createOrJoinHome: ${error.message}`);

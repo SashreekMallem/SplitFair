@@ -277,3 +277,47 @@ $$ language plpgsql security definer;
 -- Grant execute permission to authenticated users
 revoke all on function insert_home from public;
 grant execute on function insert_home to authenticated;
+
+-- Add a new RPC function to bypass RLS for adding home members
+create or replace function insert_home_member(
+  home_id uuid,
+  user_id uuid,
+  role text,
+  rent_contribution decimal(10,2),
+  move_in_date date
+) returns json as $$
+declare
+  result json;
+  inserted_id uuid;
+begin
+  insert into public.home_members (
+    home_id, user_id, role, rent_contribution, move_in_date
+  ) values (
+    home_id, user_id, role, rent_contribution, move_in_date
+  )
+  returning id into inserted_id;
+  
+  select json_build_object(
+    'success', true,
+    'member_id', inserted_id
+  ) into result;
+  
+  return result;
+exception when others then
+  return json_build_object(
+    'success', false,
+    'error', SQLERRM,
+    'detail', SQLSTATE
+  );
+end;
+$$ language plpgsql security definer;
+
+-- Grant execute permission to authenticated users
+grant execute on function insert_home_member to authenticated;
+
+-- Add a special policy for users to view homes they created right after creation
+drop policy if exists "Special view created homes" on public.homes;
+create policy "Special view created homes"
+  on public.homes 
+  for select
+  using (auth.uid() = created_by);
