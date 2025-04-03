@@ -314,21 +314,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
         accessToken: session?.access_token ? 'Present' : 'Missing'
       });
       
-      // Check for recent policy logs to help debug
-      try {
-        const { data: policyLogs, error: logsError } = await supabase.rpc('get_recent_policy_logs', {
-          limit_count: 10
-        });
-        
-        if (logsError) {
-          logError(`Error fetching policy logs: ${logsError.message}`);
-        } else if (policyLogs) {
-          logSupabaseOperation('Recent policy evaluations', policyLogs);
-        }
-      } catch (e) {
-        logError(`Exception fetching policy logs: ${e}`);
-      }
-      
       if (joinExistingHome) {
         logDebug(`Looking up home with invitation code: ${invitationCode}`);
         const { data: homeData, error: homeError } = await supabase
@@ -390,72 +375,50 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
           invitation_code: Math.random().toString(36).substring(2, 8).toUpperCase()
         };
 
-        // Try the RPC function first which we know works
-        logSupabaseOperation('Using RPC to create home', homeData);
-        const { data: rpcResult, error: rpcError } = await supabase.rpc('insert_home', homeData);
+        logSupabaseOperation('Creating home with data', homeData);
         
-        if (rpcError) {
-          logError(`RPC home creation failed: ${rpcError.message}`);
-          throw rpcError;
+        // Try a direct anonymous insert to avoid recursion issues
+        const { data: home, error: homeError } = await supabase
+          .from('homes')
+          .insert([homeData])
+          .select();
+
+        if (homeError) {
+          logError(`Error creating home: ${homeError.message}`);
+          logSupabaseOperation('Home creation error details', homeError);
+          
+          // Fallback approach for debugging
+          logSupabaseOperation('Attempting alternative insert approach');
+          const altResult = await supabase.rpc('insert_home', homeData);
+          logSupabaseOperation('Alternative insert result', altResult);
+          
+          throw homeError;
         }
+
+        logDebug(`Created home with ID: ${home?.[0]?.id}`);
         
-        if (!rpcResult || !rpcResult.success) {
-          throw new Error('Failed to create home via RPC');
+        if (!home?.[0]?.id) {
+          throw new Error('Home creation failed: No ID returned');
         }
-        
-        const homeId = rpcResult.home_id;
-        logDebug(`Created home with ID: ${homeId}`);
         
         // Create a 500ms delay to ensure the home creation is committed
         await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Now add the user to the home, with more detailed debugging
-        const homeMemberData = {
-          home_id: homeId,
+
+        logDebug(`Adding user ${userId} as owner of home ${home[0].id}`);
+        const { error: memberError } = await supabase.from('home_members').insert({
+          home_id: home[0].id,
           user_id: userId,
           role: 'owner',
           rent_contribution: parseFloat(rent),
           move_in_date: moveInDate || new Date().toISOString().split('T')[0]
-        };
-        
-        logSupabaseOperation('Adding user to home', homeMemberData);
-        
-        // First try direct insertion, which might trigger RLS error
-        const { data: memberData, error: memberError } = await supabase.from('home_members').insert(homeMemberData).select();
+        });
 
         if (memberError) {
           logError(`Error adding member to home: ${memberError.message}`);
-          logSupabaseOperation('Error details', memberError);
-          
-          // If that fails, try our RPC approach
-          logSupabaseOperation('Attempting alternative member insertion approach');
-          
-          // Create a helper RPC function similar to insert_home
-          const { error: rpcMemberError } = await supabase.rpc('insert_home_member', homeMemberData);
-          
-          if (rpcMemberError) {
-            logError(`RPC member insertion failed: ${rpcMemberError.message}`);
-            logSupabaseOperation('RPC error details', rpcMemberError);
-            
-            // Even if adding the member fails, the home was created successfully
-            // Return a partial success with the home info
-            return {
-              id: homeId,
-              name: homeData.name,
-              invitation_code: homeData.invitation_code,
-              membershipError: memberError.message
-            };
-          }
+          throw memberError;
         }
 
-        // Fetch the complete home record to return
-        const { data: home } = await supabase
-          .from('homes')
-          .select('*')
-          .eq('id', homeId)
-          .single();
-
-        return home;
+        return home[0];
       }
     } catch (error: any) {
       logError(`Error in createOrJoinHome: ${error.message}`);
@@ -510,20 +473,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
       const home = await createOrJoinHome(userId);
 
-      // Show different notification based on whether there was a membership error
-      if (home.membershipError) {
-        showNotification(
-          'Partial Success',
-          'Home created but there was an issue adding you as a member. Contact support.',
-          'warning'
-        );
-      } else {
-        showNotification(
-          'Registration Successful',
-          joinExistingHome ? 'You have joined the home successfully!' : 'Your home has been created successfully!',
-          'success'
-        );
-      }
+      showNotification(
+        'Registration Successful',
+        joinExistingHome ? 'You have joined the home successfully!' : 'Your home has been created successfully!',
+        'success'
+      );
 
       setTimeout(() => {
         navigation.navigate('Login');

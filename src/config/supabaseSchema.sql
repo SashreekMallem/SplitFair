@@ -171,91 +171,83 @@ create policy "Delete own homes"
   for delete
   using (created_by = auth.uid());
 
--- Drop problematic policies for home_members
-drop policy if exists "Insert home membership" on public.home_members;
-drop policy if exists "View home memberships" on public.home_members;
-drop policy if exists "Update own membership" on public.home_members;
-drop policy if exists "Delete own membership" on public.home_members;
+-- Policies for home_members - drop first
+drop policy if exists "Users can view members in their homes" on public.home_members;
+drop policy if exists "Users can add themselves to homes" on public.home_members;
+drop policy if exists "Users can update own membership" on public.home_members;
 
--- Create simplified policies for home_members
--- 1. Allow any authenticated user to insert themselves into home_members
-create policy "Insert home membership"with debug"
+-- Create fixed policies
+create policy "Users can view members in their homes"
+  on public.home_members for select
+  using (
+    exists (
+      select 1 from public.homes
+      where homes.id = home_members.home_id
+      and homes.created_by = auth.uid()
+    )
+    OR
+    auth.uid() = user_id
+  );
+
+create policy "Users can add themselves to homes"
   on public.home_members for insert
   with check (
     auth.uid() = user_id 
-    OR - Case 1: User is inserting themselves
-    exists (id() = user_id
+    OR 
+    exists (
       select 1 from public.homes
       where homes.id = home_members.home_id
       and homes.created_by = auth.uid()
-    )   select 1 
-  );    from public.homes
-        where homes.id = home_members.home_id
--- 2. Allow users to view their own memberships or memberships for homes they created
-create policy "View home memberships"
-  on public.home_members for select
-  using (
-    auth.uid() = user_id 
-    OR llow users to view their own memberships or memberships for homes they created
-    exists (y "View home memberships"
-      select 1 from public.homesect
-      where homes.id = home_members.home_id
-      and homes.created_by = auth.uid()
-    )R 
-  );exists (
-      select 1 from public.homes
--- 3. Allow users to update only their own memberships
-create policy "Update own membership"()
+    )
+  );
+
+-- Add a policy for updating home_members
+create policy "Users can update own membership"
   on public.home_members for update
   using (auth.uid() = user_id);
 
--- 4. Allow users to delete only their own memberships
-create policy "Delete own membership"
-  on public.home_members for delete
-  using (auth.uid() = user_id);
-
--- Trigger to update timestampsy their own memberships
+-- Trigger to update timestamps
 drop function if exists public.handle_updated_at() cascade;
 create function public.handle_updated_at()
-returns trigger as $$ user_id);
+returns trigger as $$
 begin
-  new.updated_at = now();stamps
-  return new; if exists public.handle_updated_at() cascade;
-end;te function public.handle_updated_at()
-$$ language plpgsql;$
-begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
 -- Drop and recreate triggers
 drop trigger if exists handle_updated_at on public.user_profiles;
 drop trigger if exists handle_updated_at on public.homes;
-$$ language plpgsql;
+
 create trigger handle_updated_at
 before update on public.user_profiles
-for each row execute procedure public.handle_updated_at();ofiles;
-drop trigger if exists handle_updated_at on public.homes;
+for each row execute procedure public.handle_updated_at();
+
 create trigger handle_updated_at
-before update on public.homes_at
+before update on public.homes
 for each row execute procedure public.handle_updated_at();
-for each row execute procedure public.handle_updated_at();
+
 -- Function to insert homes that bypasses policy issues
 drop function if exists insert_home cascade;
 create or replace function insert_home(
-  name text, execute procedure public.handle_updated_at();
+  name text,
   street_address text,
-  unit text,to insert homes that bypasses policy issues
-  city text,n if exists insert_home cascade;
-  state_province text,tion insert_home(
+  unit text,
+  city text,
+  state_province text,
   zip_postal_code text,
-  country text,s text,
+  country text,
   monthly_rent numeric,
   security_deposit numeric,
   lease_start_date date,
-  created_by uuid,text,
+  created_by uuid,
   invitation_code text
-) returns json as $$ic,
-declareity_deposit numeric,
-  result json;date date,
+) returns json as $$
+declare
+  result json;
   inserted_id uuid;
-beginitation_code text
+begin
   insert into public.homes (
     name, street_address, unit, city, state_province, 
     zip_postal_code, country, monthly_rent, security_deposit, 
@@ -263,140 +255,25 @@ beginitation_code text
   ) values (
     name, street_address, unit, city, state_province, 
     zip_postal_code, country, monthly_rent, security_deposit, 
-    lease_start_date, created_by, invitation_codeity_deposit, 
-  ) lease_start_date, created_by, invitation_code
+    lease_start_date, created_by, invitation_code
+  )
   returning id into inserted_id;
-    name, street_address, unit, city, state_province, 
-  select json_build_object(y, monthly_rent, security_deposit, 
-    'success', true,, created_by, invitation_code
-    'home_id', inserted_id
-  ) into result;nto inserted_id;
   
-  return result;ild_object(
+  select json_build_object(
+    'success', true,
+    'home_id', inserted_id
+  ) into result;
+  
+  return result;
 exception when others then
   return json_build_object(
     'success', false,
     'error', SQLERRM,
     'detail', SQLSTATE
-  );ption when others then
-end;turn json_build_object(
-$$ language plpgsql security definer;
-    'error', SQLERRM,
--- Grant execute permission to authenticated users
-revoke all on function insert_home from public;
-grant execute on function insert_home to authenticated;
-$$ language plpgsql security definer;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-grant execute on function insert_home_member to authenticated;-- Grant execute permission to authenticated users$$ language plpgsql security definer;end;  );    'detail', SQLSTATE    'error', SQLERRM,    'success', false,  return json_build_object(    );    )      'user_id', user_id      'home_id', home_id,      'error', SQLERRM,    jsonb_build_object(  perform log_policy_execution('insert_home_member_rpc', 'home_members', 'insert', false, exception when others then  return result;    ) into result;    'member_id', inserted_id    'success', true,  select json_build_object(    returning id into inserted_id;  )    home_id, user_id, role, rent_contribution, move_in_date  ) values (    home_id, user_id, role, rent_contribution, move_in_date  insert into public.home_members (  );    )      'role', role      'user_id', user_id,      'home_id', home_id,    jsonb_build_object(  perform log_policy_execution('insert_home_member_rpc', 'home_members', 'insert', true,   -- Log the attemptbegin  inserted_id uuid;  result json;declare) returns json as $$  move_in_date date  rent_contribution numeric,  role text,  user_id uuid,  home_id uuid,create or replace function insert_home_member(-- Function to insert a member directly, bypassing RLS
--- Grant execute permission to authenticated users
-revoke all on function insert_home from public;
-grant execute on function insert_home to authenticated;
-
--- Add a debug logging table
-create table if not exists public.policy_debug_logs (
-  id uuid primary key default uuid_generate_v4(),
-  policy_name text not null,
-  table_name text not null,
-  user_id uuid,
-  operation text not null,
-  result boolean,
-  details jsonb,
-  created_at timestamp with time zone default now()
-);
-
--- Allow anyone to insert into debug logs
-alter table public.policy_debug_logs enable row level security;
-create policy "Anyone can insert debug logs" 
-  on public.policy_debug_logs for insert 
-  with check (true);
-
--- Debug logging function
-create or replace function log_policy_execution(
-  policy_name text,
-  table_name text,
-  operation text,
-  result boolean,
-  details jsonb default '{}'::jsonb
-) returns void as $$
-begin
-  insert into public.policy_debug_logs (
-    policy_name, table_name, user_id, operation, result, details
-  ) values (
-    policy_name, table_name, auth.uid(), operation, result, details
   );
-  
-  -- Also write to Postgres logs for server-side visibility
-  raise notice 'POLICY DEBUG: Policy % on table % for % operation returned % (User: %)',
-    policy_name, table_name, operation, result, auth.uid();
-exception when others then
-  -- Don't let debug logging failures break the app
-  raise warning 'Failed to log policy execution: %', SQLERRM;
 end;
 $$ language plpgsql security definer;
 
--- Create a function to fetch recent policy logs
-create or replace function get_recent_policy_logs(limit_count int default 20)
-returns setof public.policy_debug_logs as $$
-begin
-  return query
-  select * from public.policy_debug_logs
-  order by created_at desc
-  limit limit_count;
-end;
-$$ language plpgsql security definer;
-
--- Grant access to the debug function
-grant execute on function get_recent_policy_logs to authenticated;
+-- Grant execute permission to authenticated users
+revoke all on function insert_home from public;
+grant execute on function insert_home to authenticated;
