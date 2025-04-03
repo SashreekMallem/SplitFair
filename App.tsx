@@ -1,12 +1,11 @@
-import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { AuthProvider } from './src/context/AuthContext';
-import RootNavigator from './src/navigation/RootNavigator';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import 'react-native-url-polyfill/auto';
 import { NotificationProvider } from './src/context/NotificationContext';
-import { DebugOverlay } from './src/utils/DebugHelper';
+import RootNavigator from './src/navigation/RootNavigator';
+import 'react-native-url-polyfill/auto';
 
 export default function App() {
   return (
@@ -16,8 +15,6 @@ export default function App() {
           <NotificationProvider>
             <NavigationContainer>
               <RootNavigator />
-              <StatusBar style="auto" />
-              {__DEV__ && <DebugOverlay />}
             </NavigationContainer>
           </NotificationProvider>
         </AuthProvider>

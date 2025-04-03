@@ -1,40 +1,60 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useAuth } from '../context/AuthContext';
+import { View, ActivityIndicator } from 'react-native';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import ProfileScreen from '../screens/main/ProfileScreen';
 
-const Stack = createNativeStackNavigator();
+// Define the RootStackParamList to include ProfileScreen
+export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
+  ProfileScreen: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const RootNavigator: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { authState } = useAuth();
+  const { theme } = useTheme();
 
-  if (loading) {
+  // Add a loading state check
+  if (authState === undefined) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#546DE5" />
       </View>
     );
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        <Stack.Screen name="MainTabs" component={MainTabs} />
+    // Remove the NavigationContainer wrapper - it should only be in App.tsx
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: {
+          backgroundColor: theme.colors.background,
+        },
+      }}
+    >
+      {authState.isAuthenticated ? (
+        <>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen 
+            name="ProfileScreen" 
+            component={ProfileScreen} 
+            options={{
+              animation: 'slide_from_right'
+            }}
+          />
+        </>
       ) : (
-        <Stack.Screen name="AuthStack" component={AuthStack} />
+        <Stack.Screen name="Auth" component={AuthStack} />
       )}
     </Stack.Navigator>
   );
 };
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
 
 export default RootNavigator;

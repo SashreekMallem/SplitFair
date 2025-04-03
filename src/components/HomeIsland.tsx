@@ -34,18 +34,31 @@ const MODE_CYCLE: Record<IslandMode, IslandMode> = {
   'notification': 'summary'
 };
 
+// Map modes to route names for navigation
+const MODE_TO_ROUTE: Record<IslandMode, string> = {
+  'summary': 'Home',
+  'expenses': 'Expenses',
+  'tasks': 'Sanitization',
+  'schedule': 'Schedule',
+  'furniture': 'Furniture',
+  'alert': 'Maintenance',
+  'notification': 'Home'
+};
+
 type HomeIslandProps = {
   mode: IslandMode;
   onModeChange: (mode: IslandMode) => void;
   onActionPress: () => void;
   data?: any;
+  navigation?: any; // Add navigation prop
 };
 
 const HomeIsland: React.FC<HomeIslandProps> = ({
   mode,
   onModeChange,
   onActionPress,
-  data
+  data,
+  navigation
 }) => {
   const { theme, isDarkMode } = useTheme();
   const { currentNotification, hideNotification } = useNotification();
@@ -156,7 +169,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     ]).start();
   }, [mode]);
   
-  // Pan responder for swipe gestures
+  // Pan responder for swipe gestures - Modified to only change mode without navigation
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -170,7 +183,8 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         
         if (gestureState.dx < -50) {
           // Swipe left -> next mode
-          onModeChange(MODE_CYCLE[mode]);
+          const nextMode = MODE_CYCLE[mode];
+          onModeChange(nextMode);
         } else if (gestureState.dx > 50) {
           // Swipe right -> previous mode
           const prevMode = Object.entries(MODE_CYCLE).find(([_, next]) => next === mode)?.[0] as IslandMode;

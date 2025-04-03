@@ -20,7 +20,7 @@ import { BlurView } from 'expo-blur';
 import { logDebug } from '../../utils/DebugHelper';
 import { useNotification } from '../../context/NotificationContext';
 import { useNavigation } from '@react-navigation/native';
-import HomeIsland, { IslandMode } from '../../components/HomeIsland';
+import { CommonActions } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -55,9 +55,6 @@ const HomeScreen: React.FC = () => {
   const { showNotification } = useNotification();
   const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation();
-
-  // Island state management
-  const [islandMode, setIslandMode] = useState<IslandMode>('summary');
 
   // Animation values
   const headerAnimation = useRef(new Animated.Value(0)).current;
@@ -94,45 +91,23 @@ const HomeScreen: React.FC = () => {
     };
   }, []);
 
-  // Function to handle island action button presses
-  const handleIslandAction = () => {
-    switch (islandMode) {
-      case 'summary':
-        showNotification('Home Summary', 'Viewing detailed home overview', 'info');
-        break;
-      case 'expenses':
-        showNotification('Payment', 'Processing payment...', 'success');
-        break;
-      case 'tasks':
-        showNotification('Task', 'Task marked as completed', 'success');
-        break;
-      case 'schedule':
-        showNotification('Reminder', 'Rent reminder set for 3 days before due date', 'info');
-        break;
-      case 'alert':
-        showNotification('Payment', 'Resolving overdue payment...', 'warning');
-        break;
-      case 'furniture':
-        showNotification('Furniture', 'Adding new shared item...', 'info');
-        break;
-    }
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
     logDebug('HomeScreen refreshing');
-
-    // Change island mode when refreshing to demonstrate functionality
-    const modes: IslandMode[] = ['summary', 'expenses', 'tasks', 'schedule', 'alert'];
-    const currentIndex = modes.indexOf(islandMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setIslandMode(modes[nextIndex]);
 
     // Simulate data fetching
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
     showNotification('Updated', 'Your dashboard has been refreshed with the latest data', 'success');
     setRefreshing(false);
+  };
+
+  const handleProfilePress = () => {
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'ProfileScreen',
+      })
+    );
   };
 
   const renderExpensesSection = () => {
@@ -160,7 +135,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.sectionTitle}>Recent Expenses</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('expenses')}>
+          <TouchableOpacity style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -168,11 +143,7 @@ const HomeScreen: React.FC = () => {
 
         <View style={styles.expensesContainer}>
           {mockExpenses.map((expense) => (
-            <TouchableOpacity
-              key={expense.id}
-              style={styles.expenseCard}
-              onPress={() => setIslandMode('expenses')}
-            >
+            <TouchableOpacity key={expense.id} style={styles.expenseCard}>
               <View style={styles.expenseIconContainer}>
                 <View
                   style={[
@@ -205,7 +176,7 @@ const HomeScreen: React.FC = () => {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => setIslandMode('expenses')}>
+        <TouchableOpacity style={styles.addButton}>
           <LinearGradient
             colors={['#3a7bd5', '#546DE5', '#778BEB']}
             start={{ x: 0, y: 0 }}
@@ -245,7 +216,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.sectionTitle}>Sanitization</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('tasks')}>
+          <TouchableOpacity style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -259,16 +230,6 @@ const HomeScreen: React.FC = () => {
                   styles.taskCheckbox,
                   task.status === 'completed' && styles.taskCheckboxCompleted,
                 ]}
-                onPress={() => {
-                  setIslandMode('tasks');
-                  showNotification(
-                    task.status === 'completed' ? 'Task Reopened' : 'Task Completed',
-                    `${task.title} marked as ${
-                      task.status === 'completed' ? 'pending' : 'completed'
-                    }`,
-                    task.status === 'completed' ? 'info' : 'success'
-                  );
-                }}
               >
                 {task.status === 'completed' && (
                   <Ionicons name="checkmark" size={16} color="#fff" />
@@ -288,10 +249,7 @@ const HomeScreen: React.FC = () => {
                   Assigned to {task.assignedTo} · Due {task.dueDate}
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={() => setIslandMode('tasks')}
-                style={styles.taskMenuButton}
-              >
+              <TouchableOpacity style={styles.taskMenuButton}>
                 <Ionicons name="ellipsis-vertical" size={18} color="#999" />
               </TouchableOpacity>
             </View>
@@ -326,7 +284,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.sectionTitle}>Schedule</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('schedule')}>
+          <TouchableOpacity style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -341,18 +299,7 @@ const HomeScreen: React.FC = () => {
           snapToAlignment="center"
         >
           {mockScheduledTasks.map((event) => (
-            <TouchableOpacity
-              key={event.id}
-              style={styles.scheduleCard}
-              onPress={() => {
-                if (event.title.includes('Rent')) {
-                  setIslandMode('alert');
-                } else {
-                  setIslandMode('schedule');
-                }
-              }}
-              activeOpacity={0.9}
-            >
+            <TouchableOpacity key={event.id} style={styles.scheduleCard} activeOpacity={0.9}>
               <View
                 style={[
                   styles.scheduleHeader,
@@ -392,11 +339,7 @@ const HomeScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
 
-          <TouchableOpacity
-            style={styles.scheduleAddCard}
-            onPress={() => setIslandMode('schedule')}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.scheduleAddCard} activeOpacity={0.8}>
             <View style={styles.scheduleAddContent}>
               <View style={styles.scheduleAddIconCircle}>
                 <Ionicons name="add" size={28} color="#546DE5" />
@@ -434,7 +377,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.sectionTitle}>My Furniture</Text>
           </View>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => setIslandMode('furniture')}>
+          <TouchableOpacity style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={14} color="#546DE5" />
           </TouchableOpacity>
@@ -442,12 +385,7 @@ const HomeScreen: React.FC = () => {
 
         <View style={styles.furnitureList}>
           {mockFurniture.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.furnitureCard}
-              onPress={() => setIslandMode('furniture')}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity key={item.id} style={styles.furnitureCard} activeOpacity={0.7}>
               <View style={styles.furnitureImageContainer}>
                 <View style={styles.furniturePlaceholder}>
                   <Ionicons
@@ -491,18 +429,6 @@ const HomeScreen: React.FC = () => {
 
       <StatusBar style="auto" />
 
-      <HomeIsland 
-        mode={islandMode} 
-        onModeChange={setIslandMode} 
-        onActionPress={handleIslandAction} 
-        data={{
-          expenses: mockExpenses,
-          tasks: mockSanitizationTasks,
-          events: mockScheduledTasks,
-          furniture: mockFurniture
-        }}
-      />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -535,7 +461,7 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.welcomeText}>Welcome back,</Text>
             <Text style={styles.userName}>{user?.user_metadata?.full_name || 'Roommate'}</Text>
           </View>
-          <TouchableOpacity style={styles.profileButton} onPress={() => setIslandMode('summary')}>
+          <TouchableOpacity style={styles.profileButton} onPress={handleProfilePress}>
             <View style={styles.profileImageContainer}>
               <Text style={styles.profileInitial}>
                 {(user?.user_metadata?.full_name?.[0] || 'U').toUpperCase()}
@@ -547,7 +473,6 @@ const HomeScreen: React.FC = () => {
         <View style={styles.insightCards}>
           <TouchableOpacity
             style={[styles.insightCard, styles.primaryInsightCard]}
-            onPress={() => setIslandMode('expenses')}
           >
             <LinearGradient
               colors={['#546DE5', '#778BEB']}
@@ -565,7 +490,7 @@ const HomeScreen: React.FC = () => {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.insightCard} onPress={() => setIslandMode('expenses')}>
+          <TouchableOpacity style={styles.insightCard}>
             <View style={styles.insightCardContent}>
               <Ionicons name="arrow-down-outline" size={28} color="#20BF6B" />
               <Text style={styles.insightCardLabel}>You're owed</Text>
@@ -573,7 +498,7 @@ const HomeScreen: React.FC = () => {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.insightCard} onPress={() => setIslandMode('alert')}>
+          <TouchableOpacity style={styles.insightCard}>
             <View style={styles.insightCardContent}>
               <Ionicons name="calendar-outline" size={28} color="#546DE5" />
               <Text style={styles.insightCardLabel}>Rent due in</Text>
@@ -603,7 +528,7 @@ const styles = StyleSheet.create({
     height: height * 0.25,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 120 : 100,
+    paddingTop: Platform.OS === 'ios' ? 150 : 130,
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
