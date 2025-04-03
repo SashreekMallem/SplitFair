@@ -160,6 +160,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   
   // Debug reload issues
   const isInitialMount = useRef(true);
+  const animationsStarted = useRef(false);
   
   useEffect(() => {
     logDebug('LoginScreen mounted - first screen after reload');
@@ -169,45 +170,48 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       isInitialMount.current = false;
     }
     
-    // Run animations safely with separate animated values
-    const startAnimation = () => {
-      logDebug('Starting login screen animations');
+    // Only start animations if they haven't been started already
+    if (!animationsStarted.current) {
+      const startAnimation = () => {
+        logDebug('Starting login screen animations');
+        
+        // Reset animation values to initial state
+        slideAnim.setValue(50);
+        opacityAnim.setValue(0);
+        scaleAnim.setValue(0.95);
+        
+        Animated.parallel([
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacityAnim, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          })
+        ]).start(() => {
+          logDebug('Login screen animations completed');
+          animationsStarted.current = true;
+        });
+      };
       
-      // Reset animation values to initial state
-      slideAnim.setValue(50);
-      opacityAnim.setValue(0);
-      scaleAnim.setValue(0.95);
+      // Run animations on next frame to avoid React Native animation issues
+      const animationTimer = setTimeout(() => {
+        startAnimation();
+      }, 100);
       
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        })
-      ]).start(() => {
-        logDebug('Login screen animations completed');
-      });
-    };
-    
-    // Run animations on next frame to avoid React Native animation issues
-    const animationTimer = setTimeout(() => {
-      startAnimation();
-    }, 100);
-    
-    return () => {
-      logDebug('LoginScreen unmounting');
-      clearTimeout(animationTimer);
-    };
+      return () => {
+        logDebug('LoginScreen unmounting');
+        clearTimeout(animationTimer);
+      };
+    }
   }, []);
 
   const handleLogin = async () => {
@@ -220,11 +224,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setLoading(true);
     
     try {
+      // Add a short delay to ensure any previous auth operations complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       await signIn(email, password);
       logDebug('Login successful');
     } catch (error: any) {
       logError(`Login failed: ${error.message}`);
-      Alert.alert('Login Error', error.message);
+      
+      // Enhanced error message
+      let errorMsg = error.message;
+      if (error.message.includes("Invalid login credentials")) {
+        errorMsg = "Invalid email or password. If you just registered, please wait a few moments and try again.";
+      }
+      
+      Alert.alert('Login Error', errorMsg);
     } finally {
       setLoading(false);
     }

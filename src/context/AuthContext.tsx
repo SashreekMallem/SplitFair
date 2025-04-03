@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../config/supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { logDebug, logError } from '../utils/DebugHelper';
 
 type AuthContextType = {
   user: User | null;
@@ -23,6 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      logDebug(`Initial session check: ${session ? 'Session found' : 'No session'}`);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -30,6 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      logDebug(`Auth state changed: ${_event} - ${session ? 'User present' : 'No user'}`);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -42,9 +45,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, options?: any) => {
     setLoading(true);
     try {
+      logDebug(`Sign up attempt for ${email}`);
       const { error } = await supabase.auth.signUp({ email, password, options });
       if (error) throw error;
-    } catch (error) {
+      logDebug('Sign up successful');
+    } catch (error: any) {
+      logError(`Sign up error: ${error.message}`);
       throw error;
     } finally {
       setLoading(false);
@@ -54,9 +60,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
+      logDebug(`Sign in attempt for ${email}`);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-    } catch (error) {
+      logDebug('Sign in successful');
+    } catch (error: any) {
+      logError(`Sign in error: ${error.message}`);
       throw error;
     } finally {
       setLoading(false);

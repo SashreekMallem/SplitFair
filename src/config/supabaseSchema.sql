@@ -146,12 +146,25 @@ drop policy if exists "Delete own homes" on public.homes;
 -- Drop the problematic policy causing infinite recursion
 drop policy if exists "View homes as member" on public.homes;
 
--- Create clean, non-recursive policies for homes table
--- Allow users to view homes they created
-create policy "View homes created by user"
-  on public.homes 
+-- Drop and recreate home view policies
+drop policy if exists "View homes created by user" on public.homes;
+drop policy if exists "Special view created homes" on public.homes;
+
+-- Create one simple policy for viewing homes
+create policy "Users can view any home they're associated with"
+  on public.homes
   for select
-  using (created_by = auth.uid());
+  using (
+    -- Either they created the home
+    created_by = auth.uid()
+    OR
+    -- Or they are a member of the home
+    EXISTS (
+      select 1 from public.home_members
+      where home_members.home_id = id
+      and home_members.user_id = auth.uid()
+    )
+  );
 
 -- Allow any authenticated user to create homes
 create policy "Anyone can create homes"
@@ -278,7 +291,7 @@ $$ language plpgsql security definer;
 revoke all on function insert_home from public;
 grant execute on function insert_home to authenticated;
 
--- Add a new RPC function to bypass RLS for adding home members
+-- Enhance the insert_home_member function to check for duplicates
 create or replace function insert_home_member(
   home_id uuid,
   user_id uuid,
@@ -289,7 +302,31 @@ create or replace function insert_home_member(
 declare
   result json;
   inserted_id uuid;
+  existing_member uuid;
+  owner_matches boolean;
 begin
+  -- Check if this is a duplicate entry
+  select id into existing_member from public.home_members
+  where home_members.home_id = insert_home_member.home_id
+  and home_members.user_id = insert_home_member.user_id;
+  
+  -- Check if home creator matches the user (for debugging)
+  select created_by = insert_home_member.user_id into owner_matches
+  from public.homes where id = insert_home_member.home_id;
+  
+  -- If record already exists, return it
+  if existing_member is not null then
+    select json_build_object(
+      'success', true,
+      'member_id', existing_member,
+      'home_id', insert_home_member.home_id,
+      'user_id', insert_home_member.user_id,
+      'already_exists', true
+    ) into result;
+    return result;
+  end if;
+  
+  -- Otherwise insert the new record
   insert into public.home_members (
     home_id, user_id, role, rent_contribution, move_in_date
   ) values (
@@ -299,7 +336,10 @@ begin
   
   select json_build_object(
     'success', true,
-    'member_id', inserted_id
+    'member_id', inserted_id,
+    'home_id', insert_home_member.home_id,
+    'user_id', insert_home_member.user_id,
+    'owner_match', owner_matches
   ) into result;
   
   return result;
@@ -307,17 +347,11 @@ exception when others then
   return json_build_object(
     'success', false,
     'error', SQLERRM,
-    'detail', SQLSTATE
+    'detail', SQLSTATE,
+    'owner_match', owner_matches
   );
 end;
 $$ language plpgsql security definer;
 
 -- Grant execute permission to authenticated users
 grant execute on function insert_home_member to authenticated;
-
--- Add a special policy for users to view homes they created right after creation
-drop policy if exists "Special view created homes" on public.homes;
-create policy "Special view created homes"
-  on public.homes 
-  for select
-  using (auth.uid() = created_by);

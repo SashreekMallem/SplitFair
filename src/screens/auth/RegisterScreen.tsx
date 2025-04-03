@@ -468,6 +468,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
     setLoading(true);
     try {
+      // Store credentials for auto-login
+      const credentials = {
+        email,
+        password
+      };
+      
+      logDebug('Starting user registration process');
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -483,13 +490,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
       const userId = authData.user?.id;
       if (!userId) throw new Error('User creation failed');
 
-      logAnimation('About to create user profile');
+      logDebug(`User created with ID: ${userId}. Creating profile...`);
       
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const session = await supabase.auth.getSession();
-      console.log('Current session:', session?.data?.session?.user?.id === userId ? 'Valid session' : 'Invalid session');
-      
+      // Create profile, home, etc...
       const { error: profileError } = await supabase.from('user_profiles').insert([{
         user_id: userId,
         full_name: name,
@@ -504,15 +507,36 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
       const home = await createOrJoinHome(userId);
 
+      // Show success message
       showNotification(
         'Registration Successful',
         joinExistingHome ? 'You have joined the home successfully!' : 'Your home has been created successfully!',
         'success'
       );
 
-      setTimeout(() => {
-        navigation.navigate('Login');
-      }, 2000);
+      // Instead of redirecting to login screen, auto-login the user
+      logDebug('Auto-logging in after successful registration');
+      try {
+        // Clear previous session first to avoid conflicts
+        await supabase.auth.signOut();
+        
+        const { error: signInError } = await supabase.auth.signInWithPassword(credentials);
+        
+        if (signInError) {
+          logError(`Auto-login failed: ${signInError.message}`);
+          // If auto-login fails, redirect to login screen as fallback
+          setTimeout(() => {
+            navigation.navigate('Login');
+          }, 2000);
+        }
+        // No need to navigate anywhere if login successful - AuthContext will handle it
+      } catch (loginError: any) {
+        logError(`Error during auto-login: ${loginError.message}`);
+        // Redirect to login screen as fallback
+        setTimeout(() => {
+          navigation.navigate('Login');
+        }, 2000);
+      }
     } catch (error: any) {
       showNotification('Registration Error', error.message, 'error');
     } finally {
