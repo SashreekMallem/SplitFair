@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { View, Text, StyleSheet } from 'react-native';
 import HomeScreen from '../screens/main/HomeScreen';
+import PremiumTabBar from '../components/PremiumTabBar';
 
 // Placeholder component for screens that aren't implemented yet
 const ScreenPlaceholder: React.FC<{title: string}> = ({ title }) => {
@@ -25,41 +25,22 @@ const MainTabs: React.FC = () => {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      tabBar={(props) => <PremiumTabBar {...props} />}
+      screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.background,
           elevation: 0,
           shadowOpacity: 0,
           borderBottomWidth: 0,
         },
-        headerShown: false, // Hide header for all tabs
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.text,
-        tabBarStyle: {
-          backgroundColor: theme.colors.background,
-          borderTopColor: 'rgba(0,0,0,0.05)',
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: string = '';
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Items') {
-            iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'Expenses') {
-            iconName = focused ? 'card' : 'card-outline';
-          } else if (route.name === 'Sanitization') {
-            iconName = focused ? 'water' : 'water-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          }
-
-          return <Ionicons name={iconName as any} size={size} color={color} />;
-        },
-      })}
+        headerShown: false,
+        tabBarShowLabel: true,
+      }}
+      sceneContainerStyle={{
+        backgroundColor: theme.colors.background,
+        // Add bottom padding to avoid tab bar overlap
+        paddingBottom: 100
+      }}
     >
       <Tab.Screen 
         name="Home" 

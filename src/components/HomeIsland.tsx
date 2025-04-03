@@ -14,11 +14,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
+import { useNotification } from '../context/NotificationContext';
 
 const { width } = Dimensions.get('window');
 
 // Different possible modes for the island
 export type IslandMode = 'summary' | 'expenses' | 'tasks' | 'schedule' | 'furniture' | 'alert' | 'notification';
+
+export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
 // Map to help with cycling through modes
 const MODE_CYCLE: Record<IslandMode, IslandMode> = {
@@ -45,6 +48,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   data
 }) => {
   const { theme, isDarkMode } = useTheme();
+  const { currentNotification, hideNotification } = useNotification();
   const [expanded, setExpanded] = useState(false);
   const [currentDataIndex, setCurrentDataIndex] = useState(0);
   const expandAnimation = useRef(new Animated.Value(0)).current;
@@ -55,10 +59,37 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   // Track content height for dynamic sizing
   const [contentHeight, setContentHeight] = useState(0);
   
+  // Store previous mode to return to after notification
+  const [previousMode, setPreviousMode] = useState<IslandMode>('summary');
+  
   // Add onLayout handler to measure content
   const onContentLayout = (event: LayoutChangeEvent) => {
     const { height } = event.nativeEvent.layout;
     setContentHeight(height);
+  };
+  
+  // Handle notification display
+  useEffect(() => {
+    if (currentNotification) {
+      // Save current mode to return to when notification is dismissed
+      if (mode !== 'notification') {
+        setPreviousMode(mode);
+      }
+      
+      // Switch to notification mode and show expanded island
+      onModeChange('notification');
+      setExpanded(true);
+    }
+  }, [currentNotification]);
+
+  // Handle notification dismissal
+  const handleNotificationDismiss = () => {
+    if (mode === 'notification') {
+      // Return to previous mode
+      onModeChange(previousMode);
+      setExpanded(false);
+      hideNotification();
+    }
   };
   
   // Setup pulse animation for highlight effect
@@ -94,19 +125,21 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   }, [expanded]);
   
   useEffect(() => {
-    // Reset initial state when mode changes
-    setExpanded(false);
-    Animated.timing(expandAnimation, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false
-    }).start();
-    
-    Animated.timing(iconRotation, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
+    // Reset initial state when mode changes (except for notifications)
+    if (mode !== 'notification') {
+      setExpanded(false);
+      Animated.timing(expandAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: false
+      }).start();
+      
+      Animated.timing(iconRotation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      }).start();
+    }
     
     // Animation for mode change
     Animated.sequence([
@@ -127,10 +160,14 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only respond to horizontal gestures
-        return Math.abs(gestureState.dx) > 5 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+        // Only respond to horizontal gestures when not in notification mode
+        return mode !== 'notification' && 
+               Math.abs(gestureState.dx) > 5 && 
+               Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
       },
       onPanResponderRelease: (_, gestureState) => {
+        if (mode === 'notification') return;
+        
         if (gestureState.dx < -50) {
           // Swipe left -> next mode
           onModeChange(MODE_CYCLE[mode]);
@@ -146,6 +183,12 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   ).current;
   
   const toggleExpand = () => {
+    // Don't allow collapsing notifications with toggle
+    if (mode === 'notification') {
+      handleNotificationDismiss();
+      return;
+    }
+    
     const newExpanded = !expanded;
     setExpanded(newExpanded);
     
@@ -172,13 +215,13 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     
     // Default heights if content hasn't been measured yet
     switch(mode) {
+      case 'notification': return 140; // Smaller height for notifications
       case 'summary': return 220;
       case 'expenses': return 230;
       case 'tasks': return 240;
       case 'schedule': return 230;
       case 'furniture': return 220;
       case 'alert': return 210;
-      case 'notification': return 180;
       default: return 220;
     }
   };
@@ -193,8 +236,46 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     outputRange: ['0deg', '180deg']
   });
   
+  // Get notification icon based on type
+  const getNotificationIcon = (type?: NotificationType) => {
+    switch(type) {
+      case 'success': return 'checkmark-circle';
+      case 'error': return 'alert-circle';
+      case 'warning': return 'warning';
+      case 'info':
+      default: return 'information-circle';
+    }
+  };
+  
+  // Get notification colors
+  const getNotificationColors = (type?: NotificationType) => {
+    switch(type) {
+      case 'success':
+        return isDarkMode
+          ? { gradient: ['#0E3B2E', '#114D3C', '#1D6852'], accent: '#2EAF89', text: '#E0F5EF' }
+          : { gradient: ['#147257', '#1D8F6E', '#2EAF89'], accent: '#7ADFC1', text: '#FFFFFF' };
+      case 'error':
+        return isDarkMode
+          ? { gradient: ['#5D1A1F', '#7A1F26', '#9C2A33'], accent: '#E14856', text: '#FDE7E9' }
+          : { gradient: ['#9C2A33', '#C13440', '#E14856'], accent: '#FF9AA2', text: '#FFFFFF' };
+      case 'warning':
+        return isDarkMode
+          ? { gradient: ['#523B0A', '#6D4E0D', '#8F6A1C'], accent: '#E2AB2E', text: '#FBF3E0' }
+          : { gradient: ['#B3841A', '#CC9621', '#E2AB2E'], accent: '#FFD980', text: '#FFFFFF' };
+      case 'info':
+      default:
+        return isDarkMode 
+          ? { gradient: ['#142949', '#1D3A6E', '#2E4D8E'], accent: '#4A77D1', text: '#E0E6F5' }
+          : { gradient: ['#2952A3', '#3A66BD', '#4A77D1'], accent: '#8AADF3', text: '#FFFFFF' };
+    }
+  };
+  
   // Premium color schemes for each mode
   const getPremiumColors = (modeType: IslandMode) => {
+    if (modeType === 'notification' && currentNotification) {
+      return getNotificationColors(currentNotification.type);
+    }
+    
     switch(modeType) {
       case 'summary':
         return isDarkMode 
@@ -220,10 +301,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         return isDarkMode
           ? { gradient: ['#5C1428', '#7A1935', '#A32247'], accent: '#EB5982', text: '#FDECF2' }
           : { gradient: ['#A32247', '#C7295A', '#EB5982'], accent: '#FFA5C0', text: '#FFFFFF' };
-      case 'notification':
-        return isDarkMode
-          ? { gradient: ['#1A1A1A', '#333333', '#4D4D4D'], accent: '#808080', text: '#E0E0E0' }
-          : { gradient: ['#CCCCCC', '#E0E0E0', '#F5F5F5'], accent: '#A0A0A0', text: '#000000' };
       default:
         return isDarkMode 
           ? { gradient: ['#142949', '#1D3A6E', '#2E4D8E'], accent: '#4A77D1', text: '#E0E6F5' }
@@ -233,7 +310,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   
   // Mock data for different data points to show cycling information
   const getMockData = (modeType: IslandMode, dataIndex: number) => {
-    const data = {
+    const data: Record<IslandMode, { primary: string; secondary: string }[]> = {
       summary: [
         { primary: '$124.50', secondary: 'You owe' },
         { primary: '$215.75', secondary: 'You\'re owed' },
@@ -271,12 +348,28 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       ]
     };
     
-    return data[modeType][dataIndex % 3];
+    // Return appropriate data or fallback to a default
+    return data[modeType]?.[dataIndex % 3] || { primary: 'No data', secondary: 'Check back later' };
   };
   
   // Get island data based on mode
   const getIslandContent = () => {
     const colors = getPremiumColors(mode);
+    
+    // Handle notification mode
+    if (mode === 'notification' && currentNotification) {
+      return {
+        title: currentNotification.title || 'Notification',
+        icon: getNotificationIcon(currentNotification.type),
+        color: colors.accent,
+        gradient: colors.gradient,
+        primaryText: currentNotification.title || '',
+        secondaryText: currentNotification.message || '',
+        actionText: 'Dismiss'
+      };
+    }
+    
+    // For standard modes, use mock data
     const currentData = getMockData(mode, currentDataIndex);
     
     switch(mode) {
@@ -290,7 +383,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'View Details'
         };
-        
       case 'expenses':
         return {
           title: 'Expenses',
@@ -301,7 +393,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'Pay Now'
         };
-        
       case 'tasks':
         return {
           title: 'Cleaning Tasks',
@@ -312,7 +403,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'Complete Task'
         };
-        
       case 'schedule':
         return {
           title: 'Schedule',
@@ -323,7 +413,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'Add Reminder'
         };
-        
       case 'furniture':
         return {
           title: 'Shared Items',
@@ -334,7 +423,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'Add Item'
         };
-        
       case 'alert':
         return {
           title: 'Payment Due',
@@ -345,7 +433,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'Resolve Now'
         };
-        
       case 'notification':
         return {
           title: 'Notifications',
@@ -356,7 +443,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           secondaryText: currentData.secondary,
           actionText: 'View Notification'
         };
-        
       default:
         return {
           title: 'SplitFair',
@@ -370,11 +456,38 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     }
   };
   
-  const content = getIslandContent();
-  const colors = getPremiumColors(mode);
+  // Render notification content
+  const renderNotificationContent = () => {
+    if (!currentNotification) return null;
+    
+    const colors = getPremiumColors('notification');
+    
+    return (
+      <View style={styles.expandedContent} onLayout={onContentLayout}>
+        <View style={styles.notificationContent}>
+          <Text style={[styles.notificationMessage, { color: colors.text }]}>
+            {currentNotification.message}
+          </Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={[styles.actionButton, {backgroundColor: colors.accent}]}
+          onPress={handleNotificationDismiss}
+        >
+          <Text style={styles.actionButtonText}>Dismiss</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
   
   // Content for the expanded state with onLayout to measure content
   const renderExpandedContent = () => {
+    // If we're in notification mode, show notification content
+    if (mode === 'notification') {
+      return renderNotificationContent();
+    }
+    
+    // Otherwise show regular content
     switch(mode) {
       case 'summary':
         return (
@@ -415,14 +528,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           </View>
         );
         
-      case 'expenses':
-        return (
-          <View style={styles.expandedContent} onLayout={onContentLayout}>
-            {/* ...existing expense content code... */}
-          </View>
-        );
-        
-      // All other cases remain similar but add onLayout={onContentLayout} to measure height
       default:
         return (
           <View style={styles.expandedContent} onLayout={onContentLayout}>
@@ -452,8 +557,11 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     }
   };
 
-  // Quick access mode buttons for bottom of expanded island with premium design
+  // Quick access mode buttons for bottom of expanded island
   const renderQuickModeButtons = () => {
+    // Don't show mode buttons for notifications
+    if (mode === 'notification') return null;
+    
     const modes: {mode: IslandMode, icon: string, label: string}[] = [
       {mode: 'summary', icon: 'home', label: 'Home'},
       {mode: 'expenses', icon: 'card', label: 'Expenses'},
@@ -496,6 +604,9 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     );
   };
 
+  const content = getIslandContent();
+  const colors = getPremiumColors(mode);
+  
   // Dynamic shadow based on mode
   const getShadowStyle = () => {
     return {
@@ -733,6 +844,16 @@ const styles = StyleSheet.create({
   modeButtonLabel: {
     fontSize: 10,
     fontWeight: '500',
+  },
+  notificationContent: {
+    padding: 10,
+    alignItems: 'center',
+  },
+  notificationMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 10,
   },
 });
 

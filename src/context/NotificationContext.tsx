@@ -1,12 +1,18 @@
 import React, { createContext, useState, useContext, useRef, useEffect } from 'react';
-import DynamicIsland from '../components/DynamicIsland';
 import { logDebug } from '../utils/DebugHelper';
 
-type NotificationType = 'success' | 'error' | 'warning' | 'info';
+export type NotificationType = 'success' | 'error' | 'warning' | 'info';
+
+export type NotificationData = {
+  title: string;
+  message: string;
+  type: NotificationType;
+};
 
 type NotificationContextType = {
   showNotification: (title: string, message: string, type: NotificationType, duration?: number) => void;
   hideNotification: () => void;
+  currentNotification: NotificationData | null;
 };
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -16,12 +22,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const isMounted = useRef(false);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const [notification, setNotification] = useState({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'info' as NotificationType,
-  });
+  const [notification, setNotification] = useState<NotificationData | null>(null);
 
   // Clear any existing timeouts when unmounting
   useEffect(() => {
@@ -44,7 +45,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       notificationTimeoutRef.current = null;
     }
     
-    setNotification(prev => ({ ...prev, visible: false }));
+    setNotification(null);
   };
 
   // Show a notification
@@ -63,7 +64,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
     
     // Update notification state
-    setNotification({ visible: true, title, message, type });
+    setNotification({ title, message, type });
     
     // Auto-hide notification after duration if specified
     if (duration > 0) {
@@ -74,15 +75,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   return (
-    <NotificationContext.Provider value={{ showNotification, hideNotification }}>
+    <NotificationContext.Provider value={{ 
+      showNotification, 
+      hideNotification,
+      currentNotification: notification
+    }}>
       {children}
-      <DynamicIsland
-        visible={notification.visible}
-        title={notification.title}
-        message={notification.message}
-        type={notification.type}
-        onHide={hideNotification}
-      />
     </NotificationContext.Provider>
   );
 };
