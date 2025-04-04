@@ -187,6 +187,91 @@ export const updateHomeDetails = async (
 };
 
 /**
+ * Removes a member from a home (owner only)
+ */
+export const removeHouseMember = async (
+  homeId: string,
+  memberId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // First check if user is owner or has permission
+    const { data: ownerData, error: ownerError } = await supabase
+      .from('homes')
+      .select('created_by')
+      .eq('id', homeId)
+      .single();
+
+    if (ownerError || !ownerData) {
+      logError(`Error checking ownership: ${ownerError?.message}`);
+      return { success: false, error: 'Not authorized to remove members' };
+    }
+
+    // Delete the member record
+    const { error } = await supabase
+      .from('home_members')
+      .delete()
+      .eq('id', memberId);
+
+    if (error) {
+      logError(`Error removing member: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    logError(`Unexpected error in removeHouseMember: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Allows a user to leave their current home
+ */
+export const leaveHome = async (
+  homeId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Find the member record to delete
+    const { data, error: findError } = await supabase
+      .from('home_members')
+      .select('id, role')
+      .eq('home_id', homeId)
+      .eq('user_id', userId)
+      .single();
+
+    if (findError || !data) {
+      logError(`Error finding membership: ${findError?.message}`);
+      return { success: false, error: 'Membership not found' };
+    }
+
+    // Check if user is the owner
+    if (data.role === 'owner') {
+      return { 
+        success: false, 
+        error: 'As the owner, you cannot leave the home. You can delete the home instead or transfer ownership first.'
+      };
+    }
+
+    // Delete the membership record
+    const { error } = await supabase
+      .from('home_members')
+      .delete()
+      .eq('id', data.id);
+
+    if (error) {
+      logError(`Error leaving home: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    logError(`Unexpected error in leaveHome: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Direct fetch that will likely trigger the recursion error for diagnostic purposes
  */
 export const testDirectHomeMembershipFetch = async (userId: string) => {

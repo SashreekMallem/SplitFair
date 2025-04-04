@@ -26,7 +26,7 @@ import { logDebug, logError } from '../../utils/DebugHelper';
 import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 import { fetchUserProfile, updateUserProfile, UserProfile } from '../../services/api/userService';
-import { fetchUserHome, fetchHomeMembers, updateHomeDetails, HomeDetails, HomeMember } from '../../services/api/homeService';
+import { fetchUserHome, fetchHomeMembers, updateHomeDetails, HomeDetails, HomeMember, removeHouseMember, leaveHome } from '../../services/api/homeService';
 
 const { width } = Dimensions.get('window');
 
@@ -51,6 +51,8 @@ const ProfileScreen: React.FC = () => {
   const [editHomeMode, setEditHomeMode] = useState<boolean>(false);
   const [editedHome, setEditedHome] = useState<Partial<HomeDetails>>({});
   const [savingHome, setSavingHome] = useState<boolean>(false);
+
+  const [userRole, setUserRole] = useState<string>('member');
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeInAnim = useRef(new Animated.Value(0)).current;
@@ -102,6 +104,9 @@ const ProfileScreen: React.FC = () => {
 
       const roommatesData = await fetchHomeMembers(homeData.id, user.id);
       setRoommates(roommatesData);
+
+      const isOwner = homeData.created_by === user.id;
+      setUserRole(isOwner ? 'owner' : 'member');
 
       logDebug('User data fetched successfully');
     } catch (error: any) {
@@ -179,6 +184,74 @@ const ProfileScreen: React.FC = () => {
         showNotification('Furniture', 'Adding new shared item...', 'info');
         break;
     }
+  };
+
+  const handleRemoveMember = (memberId: string, memberName: string) => {
+    Alert.alert(
+      'Remove Roommate',
+      `Are you sure you want to remove ${memberName} from your home?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!home) return;
+
+              const result = await removeHouseMember(home.id, memberId);
+
+              if (result.success) {
+                showNotification('Success', `${memberName} has been removed from your home`, 'success');
+                fetchUserData();
+              } else {
+                showNotification('Error', result.error || 'Failed to remove roommate', 'error');
+              }
+            } catch (error: any) {
+              logError(`Error removing roommate: ${error.message}`);
+              showNotification('Error', error.message, 'error');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLeaveHome = () => {
+    Alert.alert(
+      'Leave Home',
+      'Are you sure you want to leave this home? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!home || !user) return;
+
+              const result = await leaveHome(home.id, user.id);
+
+              if (result.success) {
+                showNotification('Success', 'You have left the home', 'success');
+                navigation.goBack();
+              } else {
+                showNotification('Error', result.error || 'Failed to leave home', 'error');
+              }
+            } catch (error: any) {
+              logError(`Error leaving home: ${error.message}`);
+              showNotification('Error', error.message, 'error');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = (name: string) => {
@@ -797,7 +870,7 @@ const ProfileScreen: React.FC = () => {
                       </>
                     ) : (
                       <TouchableOpacity 
-                        style={[styles.financialItem, styles.financialAddButton]}
+                        style={styles.addLeaseEndButton}
                         onPress={toggleHomeEditMode}
                       >
                         <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
@@ -826,7 +899,7 @@ const ProfileScreen: React.FC = () => {
                     {savingHome ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                      <Text style={styles.saveButtonText}>Save</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -932,15 +1005,39 @@ const ProfileScreen: React.FC = () => {
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.roommateAction}>
-                  <Ionicons
-                    name="ellipsis-vertical"
-                    size={20}
-                    color={isDarkMode ? '#999' : '#777'}
-                  />
+                <TouchableOpacity 
+                  style={styles.roommateAction}
+                  onPress={() => userRole === 'owner' ? 
+                    handleRemoveMember(roommate.id, roommate.full_name || 'User') : 
+                    null}
+                >
+                  {userRole === 'owner' && (
+                    <Ionicons
+                      name="person-remove-outline"
+                      size={20}
+                      color="#FF6B6B"
+                    />
+                  )}
+                  {userRole !== 'owner' && (
+                    <Ionicons
+                      name="ellipsis-vertical"
+                      size={20}
+                      color={isDarkMode ? '#999' : '#777'}
+                    />
+                  )}
                 </TouchableOpacity>
               </View>
             ))}
+
+            {userRole !== 'owner' && (
+              <TouchableOpacity
+                style={styles.leaveHomeButton}
+                onPress={handleLeaveHome}
+              >
+                <Ionicons name="exit-outline" size={18} color="#FF6B6B" />
+                <Text style={styles.leaveHomeText}>Leave This Home</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         )}
 
@@ -1189,12 +1286,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   financialItem: {
-    minWidth: '45%',
+    width: '48%',
+    height: 90,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: 'rgba(150, 150, 150, 0.08)',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   financialValue: {
@@ -1210,7 +1309,9 @@ const styles = StyleSheet.create({
   },
   financialEditItem: {
     alignItems: 'center',
+    justifyContent: 'center',
     width: '100%',
+    height: '100%',
   },
   financialInput: {
     fontSize: 16,
@@ -1220,6 +1321,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(150, 150, 150, 0.3)',
     width: '90%',
+    marginTop: 4,
+  },
+  addLeaseEndButton: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
   },
   roommateItem: {
     flexDirection: 'row',
@@ -1290,6 +1399,22 @@ const styles = StyleSheet.create({
   roommateAction: {
     padding: 8,
   },
+  leaveHomeButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 107, 107, 0.05)',
+  },
+  leaveHomeText: {
+    color: '#FF6B6B',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
   footer: {
     paddingVertical: 20,
     paddingHorizontal: 20,
@@ -1339,11 +1464,6 @@ const styles = StyleSheet.create({
     color: '#333',
     fontSize: 16,
     fontWeight: '500',
-  },
-  financialAddButton: {
-    backgroundColor: 'rgba(84, 109, 229, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 
