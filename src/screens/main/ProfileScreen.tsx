@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Clipboard,
   Platform,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -37,7 +38,6 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
 
   const [islandMode, setIslandMode] = useState<IslandMode>('summary');
-
   const [loading, setLoading] = useState<boolean>(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [home, setHome] = useState<HomeDetails | null>(null);
@@ -50,7 +50,30 @@ const ProfileScreen: React.FC = () => {
   const [inviteModalVisible, setInviteModalVisible] = useState<boolean>(false);
   const [editing, setEditing] = useState<boolean>(false);
 
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const fadeInAnim = useRef(new Animated.Value(0)).current;
+  const translateYAnim = useRef(new Animated.Value(50)).current;
+
   useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeInAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateYAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     fetchUserData();
   }, []);
 
@@ -61,20 +84,18 @@ const ProfileScreen: React.FC = () => {
 
       logDebug('Fetching user profile data');
 
-      // 1. Fetch user profile using service
       const profileData = await fetchUserProfile(user.id);
       if (!profileData) {
         logError('Failed to fetch user profile');
         throw new Error('Failed to fetch profile');
       }
-      
+
       setProfile(profileData);
       setEditedProfile({
         full_name: profileData.full_name,
         phone_number: profileData.phone_number || '',
       });
 
-      // 2. Fetch user's home using service
       const homeData = await fetchUserHome(user.id);
       if (!homeData) {
         logError('No home data found');
@@ -83,7 +104,6 @@ const ProfileScreen: React.FC = () => {
       }
       setHome(homeData);
 
-      // 3. Fetch roommates using service
       const roommatesData = await fetchHomeMembers(homeData.id, user.id);
       setRoommates(roommatesData);
 
@@ -101,10 +121,9 @@ const ProfileScreen: React.FC = () => {
       if (!profile || !user) return;
       setEditing(true);
 
-      // Use the service to update profile
       const updatedProfile = await updateUserProfile(user.id, {
         full_name: editedProfile.full_name,
-        phone_number: editedProfile.phone_number
+        phone_number: editedProfile.phone_number,
       });
 
       if (!updatedProfile) {
@@ -152,28 +171,24 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+            showNotification('Success', 'Logged out successfully', 'success');
+          } catch (error: any) {
+            showNotification('Error', error.message, 'error');
+          }
         },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              showNotification('Success', 'Logged out successfully', 'success');
-            } catch (error: any) {
-              showNotification('Error', error.message, 'error');
-            }
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleIslandAction = () => {
@@ -202,15 +217,53 @@ const ProfileScreen: React.FC = () => {
   const getInitials = (name: string) => {
     return name
       .split(' ')
-      .map(part => part[0])
+      .map((part) => part[0])
       .join('')
       .toUpperCase()
       .substring(0, 2);
   };
 
+  const SectionHeader = ({
+    title,
+    icon,
+    action,
+  }: {
+    title: string;
+    icon?: string;
+    action?: () => void;
+  }) => (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderLeft}>
+        {icon && (
+          <View
+            style={[
+              styles.sectionHeaderIcon,
+              { backgroundColor: theme.colors.primary + '20' },
+            ]}
+          >
+            <Ionicons name={icon as any} size={18} color={theme.colors.primary} />
+          </View>
+        )}
+        <Text style={[styles.sectionHeaderTitle, { color: theme.colors.text }]}>
+          {title}
+        </Text>
+      </View>
+      {action && (
+        <TouchableOpacity onPress={action} style={styles.sectionHeaderAction}>
+          <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.loadingText, { color: theme.colors.text }]}>
           Loading profile...
@@ -221,99 +274,183 @@ const ProfileScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar style="auto" />
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       <LinearGradient
         colors={[
           isDarkMode ? 'rgba(84, 109, 229, 0.15)' : 'rgba(84, 109, 229, 0.08)',
           isDarkMode ? 'rgba(84, 109, 229, 0.05)' : 'rgba(84, 109, 229, 0.02)',
-          'transparent'
+          'transparent',
         ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 0.5 }}
         style={styles.headerGradient}
       />
 
-      <HomeIsland 
-        mode={islandMode} 
-        onModeChange={setIslandMode} 
+      <Animated.View
+        style={[
+          styles.fixedHeader,
+          {
+            opacity: headerOpacity,
+            backgroundColor: isDarkMode
+              ? 'rgba(18, 18, 18, 0.9)'
+              : 'rgba(255, 255, 255, 0.9)',
+          },
+        ]}
+      >
+        <BlurView
+          intensity={isDarkMode ? 40 : 60}
+          tint={isDarkMode ? 'dark' : 'light'}
+          style={styles.blurHeader}
+        >
+          <View style={styles.fixedHeaderContent}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.fixedHeaderTitle, { color: theme.colors.text }]}>
+              Profile
+            </Text>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+                ]}
+                onPress={toggleTheme}
+              >
+                <Ionicons
+                  name={isDarkMode ? 'sunny-outline' : 'moon-outline'}
+                  size={20}
+                  color={theme.colors.text}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+                ]}
+                onPress={handleLogout}
+              >
+                <Ionicons name="log-out-outline" size={20} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </BlurView>
+      </Animated.View>
+
+      <HomeIsland
+        mode={islandMode}
+        onModeChange={setIslandMode}
         onActionPress={handleIslandAction}
         navigation={navigation}
         data={{
           expenses: [],
           tasks: [],
           events: [],
-          furniture: []
+          furniture: [],
         }}
       />
 
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: Platform.OS === 'ios' ? 120 : 100 }
-        ]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
       >
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-          </TouchableOpacity>
-
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profile</Text>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+              Profile
+            </Text>
+          </View>
 
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.themeToggle}
+              style={[
+                styles.iconButton,
+                { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+              ]}
               onPress={toggleTheme}
             >
               <Ionicons
                 name={isDarkMode ? 'sunny-outline' : 'moon-outline'}
-                size={24}
+                size={20}
                 color={theme.colors.text}
               />
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={styles.logoutButton}
+              style={[
+                styles.iconButton,
+                { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+              ]}
               onPress={handleLogout}
             >
-              <Ionicons name="log-out-outline" size={24} color={theme.colors.text} />
+              <Ionicons name="log-out-outline" size={20} color={theme.colors.text} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Profile Card */}
-        <View style={[styles.profileCard, { backgroundColor: theme.colors.card }]}>
-          {/* Profile header with avatar */}
-          <View style={styles.profileHeader}>
-            <View style={[
-              styles.avatarContainer, 
-              { borderColor: theme.colors.primary }
-            ]}>
+        <Animated.View
+          style={[
+            styles.profileHeroCard,
+            {
+              backgroundColor: theme.colors.card,
+              opacity: fadeInAnim,
+              transform: [{ translateY: translateYAnim }],
+            },
+          ]}
+        >
+          <View style={styles.profileHero}>
+            <View
+              style={[
+                styles.avatarContainer,
+                {
+                  borderColor: theme.colors.primary,
+                  shadowColor: theme.colors.primary,
+                },
+              ]}
+            >
               {profile?.profile_image_url ? (
                 <Image
                   source={{ uri: profile.profile_image_url }}
                   style={styles.avatar}
                 />
               ) : (
-                <View style={[styles.initialsAvatar, { backgroundColor: theme.colors.primary }]}>
+                <LinearGradient
+                  colors={[
+                    theme.colors.primary,
+                    isDarkMode ? '#7B6FE6' : '#6C63FF',
+                  ]}
+                  style={styles.initialsAvatar}
+                >
                   <Text style={styles.initialsText}>
                     {getInitials(profile?.full_name || 'User')}
                   </Text>
-                </View>
+                </LinearGradient>
               )}
             </View>
-            
+
             <View style={styles.profileInfo}>
               {editMode ? (
                 <TextInput
                   style={[styles.nameInput, { color: theme.colors.text }]}
                   value={editedProfile.full_name}
-                  onChangeText={(text) => setEditedProfile(prev => ({ ...prev, full_name: text }))}
+                  onChangeText={(text) =>
+                    setEditedProfile((prev) => ({ ...prev, full_name: text }))
+                  }
                   placeholder="Your name"
                   placeholderTextColor="#999"
                 />
@@ -322,216 +459,480 @@ const ProfileScreen: React.FC = () => {
                   {profile?.full_name || 'User'}
                 </Text>
               )}
-              
+
               <Text style={[styles.profileEmail, { color: isDarkMode ? '#bbb' : '#666' }]}>
                 {profile?.email || user?.email || 'No email'}
               </Text>
+
+              <View style={styles.profileBadges}>
+                <View
+                  style={[
+                    styles.profileBadge,
+                    { backgroundColor: theme.colors.primary + '20' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.profileBadgeText,
+                      { color: theme.colors.primary },
+                    ]}
+                  >
+                    {home?.id ? 'Home Member' : 'No Home'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.profileBadge,
+                    { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.profileBadgeText,
+                      { color: isDarkMode ? '#bbb' : '#666' },
+                    ]}
+                  >
+                    Joined {new Date(profile?.created_at || '').toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
             </View>
-            
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => {
-                if (editMode) {
-                  handleUpdateProfile();
-                } else {
-                  setEditMode(true);
-                }
-              }}
-              disabled={editing}
-            >
-              {editing ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-              ) : (
-                <Ionicons
-                  name={editMode ? "checkmark" : "pencil-outline"}
-                  size={20}
-                  color={theme.colors.primary}
-                />
-              )}
-            </TouchableOpacity>
           </View>
-          
-          {/* Profile details */}
+
+          <TouchableOpacity
+            style={[
+              styles.editButton,
+              editMode
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: isDarkMode ? '#333' : '#f0f0f0' },
+            ]}
+            onPress={() => {
+              if (editMode) {
+                handleUpdateProfile();
+              } else {
+                setEditMode(true);
+              }
+            }}
+            disabled={editing}
+          >
+            {editing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons
+                name={editMode ? 'checkmark' : 'pencil'}
+                size={editMode ? 20 : 18}
+                color={editMode ? '#fff' : theme.colors.primary}
+              />
+            )}
+          </TouchableOpacity>
+
           <View style={styles.profileDetails}>
+            <SectionHeader title="Contact Information" icon="person" />
+
             <View style={styles.detailItem}>
-              <Ionicons name="call-outline" size={20} color={theme.colors.primary} />
+              <View
+                style={[
+                  styles.detailIconContainer,
+                  { backgroundColor: theme.colors.primary + '15' },
+                ]}
+              >
+                <Ionicons name="call-outline" size={18} color={theme.colors.primary} />
+              </View>
+
               {editMode ? (
                 <TextInput
                   style={[styles.detailInput, { color: theme.colors.text }]}
                   value={editedProfile.phone_number}
-                  onChangeText={(text) => setEditedProfile(prev => ({ ...prev, phone_number: text }))}
-                  placeholder="Your phone number"
+                  onChangeText={(text) =>
+                    setEditedProfile((prev) => ({ ...prev, phone_number: text }))
+                  }
+                  placeholder="Add phone number"
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                 />
               ) : (
-                <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                  {profile?.phone_number || 'No phone number'}
-                </Text>
+                <>
+                  <View style={styles.detailTextContainer}>
+                    <Text
+                      style={[
+                        styles.detailLabel,
+                        { color: isDarkMode ? '#999' : '#666' },
+                      ]}
+                    >
+                      Phone Number
+                    </Text>
+                    <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                      {profile?.phone_number || 'Not provided'}
+                    </Text>
+                  </View>
+                  {!editMode && (
+                    <Ionicons
+                      name={profile?.phone_number ? 'call' : 'add-circle-outline'}
+                      size={22}
+                      color={
+                        profile?.phone_number
+                          ? theme.colors.primary
+                          : isDarkMode
+                          ? '#999'
+                          : '#666'
+                      }
+                      style={styles.detailAction}
+                    />
+                  )}
+                </>
               )}
             </View>
-            
+
             <View style={styles.detailItem}>
-              <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-              <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                Joined {new Date(profile?.created_at || '').toLocaleDateString()}
-              </Text>
+              <View
+                style={[styles.detailIconContainer, { backgroundColor: '#4267B215' }]}
+              >
+                <Ionicons name="mail-outline" size={18} color="#4267B2" />
+              </View>
+
+              <View style={styles.detailTextContainer}>
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: isDarkMode ? '#999' : '#666' },
+                  ]}
+                >
+                  Email
+                </Text>
+                <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                  {profile?.email || user?.email || 'No email'}
+                </Text>
+              </View>
+
+              <Ionicons name="mail" size={22} color="#4267B2" style={styles.detailAction} />
             </View>
           </View>
-        </View>
-        
-        {/* Home Information */}
+        </Animated.View>
+
         {home && (
-          <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              Home Details
-            </Text>
-            
+          <Animated.View
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: theme.colors.card,
+                opacity: fadeInAnim,
+                transform: [{ translateY: translateYAnim }],
+              },
+            ]}
+          >
+            <SectionHeader
+              title="Home Details"
+              icon="home"
+              action={() =>
+                showNotification('Coming Soon', 'Home editing will be available soon', 'info')
+              }
+            />
+
             <View style={styles.homeDetails}>
-              <View style={styles.homeTitleRow}>
-                <Text style={[styles.homeTitle, { color: theme.colors.text }]}>
-                  {home.name}
-                </Text>
-                
-                <TouchableOpacity
-                  style={styles.editHomeButton}
-                  onPress={() => {
-                    showNotification('Coming Soon', 'Home editing will be available soon', 'info');
-                  }}
+              <View style={styles.detailItem}>
+                <View
+                  style={[
+                    styles.detailIconContainer,
+                    { backgroundColor: theme.colors.primary + '15' },
+                  ]}
                 >
-                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.addressContainer}>
-                <Ionicons name="location-outline" size={20} color={theme.colors.primary} />
-                <View style={styles.addressDetails}>
-                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
-                    {home.street_address}{home.unit ? `, ${home.unit}` : ''}
+                  <Ionicons name="business-outline" size={18} color={theme.colors.primary} />
+                </View>
+
+                <View style={styles.detailTextContainer}>
+                  <Text
+                    style={[
+                      styles.detailLabel,
+                      { color: isDarkMode ? '#999' : '#666' },
+                    ]}
+                  >
+                    Home Name
                   </Text>
-                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
+                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                    {home.name}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <View
+                  style={[
+                    styles.detailIconContainer,
+                    { backgroundColor: '#4CD97D15' },
+                  ]}
+                >
+                  <Ionicons name="location-outline" size={18} color="#4CD97D" />
+                </View>
+
+                <View style={styles.detailTextContainer}>
+                  <Text
+                    style={[
+                      styles.detailLabel,
+                      { color: isDarkMode ? '#999' : '#666' },
+                    ]}
+                  >
+                    Address
+                  </Text>
+                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                    {home.street_address}
+                    {home.unit ? `, ${home.unit}` : ''}
+                  </Text>
+                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
                     {home.city}, {home.state_province} {home.zip_postal_code}
                   </Text>
-                  <Text style={[styles.addressText, { color: theme.colors.text }]}>
+                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
                     {home.country}
                   </Text>
                 </View>
               </View>
 
-              <View style={styles.homeDetailRow}>
-                <Ionicons name="cash-outline" size={20} color={theme.colors.primary} />
-                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
-                  Monthly Rent: ${home.monthly_rent.toFixed(2)}
-                </Text>
-              </View>
-
-              <View style={styles.homeDetailRow}>
-                <Ionicons name="shield-outline" size={20} color={theme.colors.primary} />
-                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
-                  Security Deposit: ${home.security_deposit.toFixed(2)}
-                </Text>
-              </View>
-
-              <View style={styles.homeDetailRow}>
-                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-                <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
-                  Lease Start: {new Date(home.lease_start_date).toLocaleDateString()}
-                </Text>
-              </View>
-              
-              {home.lease_end_date && (
-                <View style={styles.homeDetailRow}>
-                  <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-                  <Text style={[styles.homeDetailText, { color: theme.colors.text }]}>
-                    Lease End: {new Date(home.lease_end_date).toLocaleDateString()}
+              <View style={styles.homeFinancials}>
+                <View style={styles.financialItem}>
+                  <Text style={styles.financialValue}>
+                    ${home.monthly_rent.toFixed(0)}
                   </Text>
+                  <Text style={styles.financialLabel}>Monthly Rent</Text>
                 </View>
-              )}
-            </View>
-          </View>
-        )}
-        
-        {/* Invitation Code */}
-        {home && (
-          <View style={[styles.inviteCard, { backgroundColor: theme.colors.primary }]}>
-            <Text style={styles.inviteTitle}>Invite Friends to Join</Text>
-            <View style={styles.inviteCodeContainer}>
-              <Text style={styles.inviteCode}>{home.invitation_code}</Text>
-            </View>
-            <View style={styles.inviteActions}>
-              <TouchableOpacity
-                style={styles.inviteButton}
-                onPress={handleShareInviteCode}
-              >
-                <Ionicons name="share-outline" size={18} color="#fff" />
-                <Text style={styles.inviteButtonText}>Share</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.inviteButton}
-                onPress={handleCopyInviteCode}
-              >
-                <Ionicons name="copy-outline" size={18} color="#fff" />
-                <Text style={styles.inviteButtonText}>Copy</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        
-        {/* Roommates Section */}
-        {roommates.length > 0 && (
-          <View style={[styles.sectionCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              Roommates
-            </Text>
-            
-            {roommates.map((roommate) => (
-              <View key={roommate.id} style={styles.roommateItem}>
-                {roommate.profile_image_url ? (
-                  <Image
-                    source={{ uri: roommate.profile_image_url }}
-                    style={styles.roommateAvatar}
-                  />
-                ) : (
-                  <View style={[styles.roommateInitialsAvatar, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={styles.roommateInitialsText}>
-                      {getInitials(roommate.full_name || 'User')}
+
+                <View style={styles.financialItem}>
+                  <Text style={styles.financialValue}>
+                    ${home.security_deposit.toFixed(0)}
+                  </Text>
+                  <Text style={styles.financialLabel}>Security Deposit</Text>
+                </View>
+
+                <View style={styles.financialItem}>
+                  <Text style={styles.financialValue}>
+                    {new Date(home.lease_start_date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                  <Text style={styles.financialLabel}>Lease Start</Text>
+                </View>
+
+                {home.lease_end_date && (
+                  <View style={styles.financialItem}>
+                    <Text style={styles.financialValue}>
+                      {new Date(home.lease_end_date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                     </Text>
+                    <Text style={styles.financialLabel}>Lease End</Text>
                   </View>
                 )}
-                
-                <View style={styles.roommateInfo}>
-                  <Text style={[styles.roommateName, { color: theme.colors.text }]}>
-                    {roommate.full_name}
-                  </Text>
-                  <Text style={[styles.roommateRole, { color: isDarkMode ? '#bbb' : '#666' }]}>
-                    {roommate.role.charAt(0).toUpperCase() + roommate.role.slice(1)}
-                    {roommate.rent_contribution ? ` • $${roommate.rent_contribution}/month` : ''}
-                  </Text>
-                  <Text style={[styles.roommateSince, { color: isDarkMode ? '#bbb' : '#666' }]}>
-                    Member since {new Date(roommate.joined_at).toLocaleDateString()}
-                  </Text>
-                </View>
               </View>
-            ))}
-          </View>
+            </View>
+          </Animated.View>
         )}
 
-        {/* App Info */}
-        <View style={[styles.infoCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#F5F5F5' }]}>
-          <Text style={[styles.infoText, { color: isDarkMode ? '#bbb' : '#666' }]}>
-            SplitFair v1.0.0
-          </Text>
+        {home && (
+          <Animated.View
+            style={[
+              styles.inviteCardContainer,
+              {
+                opacity: fadeInAnim,
+                transform: [{ translateY: translateYAnim }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={
+                isDarkMode
+                  ? ['#3750A8', '#4A61BC', '#5A72D2']
+                  : ['#546DE5', '#606DD0', '#7C8CE9']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.inviteCard}
+            >
+              <View style={styles.inviteContent}>
+                <View style={styles.inviteTop}>
+                  <Ionicons name="people" size={24} color="#fff" />
+                  <Text style={styles.inviteTitle}>Invite Roommates</Text>
+                </View>
+
+                <View style={styles.inviteCodeContainer}>
+                  <Text style={styles.inviteCodeLabel}>SHARE THIS CODE</Text>
+                  <Text style={styles.inviteCode}>{home.invitation_code}</Text>
+                  <View style={styles.inviteDivider} />
+                  <Text style={styles.inviteNote}>
+                    Friends can join your home by entering this code in the app
+                  </Text>
+                </View>
+
+                <View style={styles.inviteActions}>
+                  <TouchableOpacity
+                    style={styles.inviteButton}
+                    onPress={handleCopyInviteCode}
+                  >
+                    <Ionicons name="copy-outline" size={18} color="#fff" />
+                    <Text style={styles.inviteButtonText}>Copy</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.inviteButton}
+                    onPress={handleShareInviteCode}
+                  >
+                    <Ionicons name="share-social-outline" size={18} color="#fff" />
+                    <Text style={styles.inviteButtonText}>Share</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        )}
+
+        {roommates.length > 0 && (
+          <Animated.View
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: theme.colors.card,
+                opacity: fadeInAnim,
+                transform: [{ translateY: translateYAnim }],
+              },
+            ]}
+          >
+            <SectionHeader title="Roommates" icon="people" />
+
+            {roommates.map((roommate, index) => (
+              <View
+                key={roommate.id}
+                style={[
+                  styles.roommateItem,
+                  index < roommates.length - 1 && styles.roommateItemBorder,
+                ]}
+              >
+                <View style={styles.roommateAvatar}>
+                  {roommate.profile_image_url ? (
+                    <Image
+                      source={{ uri: roommate.profile_image_url }}
+                      style={styles.roommatePic}
+                    />
+                  ) : (
+                    <LinearGradient
+                      colors={
+                        roommate.role === 'owner'
+                          ? ['#FFA726', '#FB8C00']
+                          : ['#78A3FF', '#5C8AFF']
+                      }
+                      style={styles.roommateInitials}
+                    >
+                      <Text style={styles.roommateInitialsText}>
+                        {getInitials(roommate.full_name || 'User')}
+                      </Text>
+                    </LinearGradient>
+                  )}
+                </View>
+
+                <View style={styles.roommateInfo}>
+                  <View style={styles.roommateNameRow}>
+                    <Text style={[styles.roommateName, { color: theme.colors.text }]}>
+                      {roommate.full_name}
+                    </Text>
+
+                    <View
+                      style={[
+                        styles.roommateRoleBadge,
+                        {
+                          backgroundColor:
+                            roommate.role === 'owner' ? '#FFA72620' : '#78A3FF20',
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.roommateRoleText,
+                          {
+                            color:
+                              roommate.role === 'owner' ? '#FFA726' : '#78A3FF',
+                          },
+                        ]}
+                      >
+                        {roommate.role.charAt(0).toUpperCase() +
+                          roommate.role.slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.roommateDetails}>
+                    {roommate.rent_contribution > 0 && (
+                      <View style={styles.roommateDetailItem}>
+                        <Ionicons
+                          name="cash-outline"
+                          size={14}
+                          color={isDarkMode ? '#bbb' : '#666'}
+                        />
+                        <Text
+                          style={[
+                            styles.roommateDetailText,
+                            { color: isDarkMode ? '#bbb' : '#666' },
+                          ]}
+                        >
+                          ${roommate.rent_contribution}/month
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.roommateDetailItem}>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={14}
+                        color={isDarkMode ? '#bbb' : '#666'}
+                      />
+                      <Text
+                        style={[
+                          styles.roommateDetailText,
+                          { color: isDarkMode ? '#bbb' : '#666' },
+                        ]}
+                      >
+                        Since{' '}
+                        {new Date(roommate.joined_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.roommateAction}>
+                  <Ionicons
+                    name="ellipsis-vertical"
+                    size={20}
+                    color={isDarkMode ? '#999' : '#777'}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </Animated.View>
+        )}
+
+        <View style={[styles.footer, { backgroundColor: 'transparent' }]}>
+          <View style={styles.appVersion}>
+            <Text style={[styles.versionText, { color: isDarkMode ? '#777' : '#999' }]}>
+              SplitFair v1.0.0
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.supportButton}>
+            <Text style={[styles.supportText, { color: theme.colors.primary }]}>
+              Need Help?
+            </Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
-      
-      {/* Invite Modal */}
+      </Animated.ScrollView>
+
       <Modal
         visible={inviteModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setInviteModalVisible(false)}
       >
-        {/* ...modal content... */}
+        {/* Modal content would go here */}
       </Modal>
     </View>
   );
@@ -546,13 +947,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: 200,
+    height: 250,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 120 : 100,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 40,
   },
   loadingContainer: {
@@ -561,8 +962,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
+  },
+  fixedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+  },
+  blurHeader: {
+    width: '100%',
+  },
+  fixedHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 10,
+  },
+  fixedHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
@@ -570,6 +993,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 24,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backButton: {
     width: 40,
@@ -582,237 +1009,383 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
+    marginLeft: 12,
   },
   headerActions: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
-  themeToggle: {
-    padding: 8,
-    marginRight: 12,
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
-  logoutButton: {
-    padding: 8,
-  },
-  profileCard: {
+  profileHeroCard: {
     marginHorizontal: 20,
     marginBottom: 24,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 24,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    overflow: 'hidden',
   },
-  profileHeader: {
+  profileHero: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   avatarContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   avatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 32,
+    borderRadius: 44,
   },
   initialsAvatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 32,
+    borderRadius: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   initialsText: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: '700',
     color: '#fff',
   },
   profileInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 20,
+  },
+  nameInput: {
+    fontSize: 22,
+    fontWeight: '700',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
   },
   profileName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
   },
   profileEmail: {
     fontSize: 14,
     marginTop: 4,
   },
-  editButton: {
-    padding: 8,
-  },
-  profileDetails: {
-    marginTop: 16,
-  },
-  detailItem: {
+  profileBadges: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginTop: 8,
+    flexWrap: 'wrap',
   },
-  detailText: {
-    marginLeft: 8,
-    fontSize: 16,
-  },
-  detailInput: {
-    marginLeft: 8,
-    fontSize: 16,
-    flex: 1,
-  },
-  sectionCard: {
-    marginHorizontal: 20,
-    marginBottom: 24,
+  profileBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    padding: 16,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  profileBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  editButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
+  profileDetails: {
+    paddingTop: 8,
   },
-  homeDetails: {
-    marginTop: 8,
-  },
-  homeTitleRow: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  homeTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  editHomeButton: {
-    padding: 4,
-  },
-  addressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  addressDetails: {
-    marginLeft: 8,
-  },
-  addressText: {
-    fontSize: 14,
-  },
-  homeDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    marginTop: 6,
-  },
-  homeDetailText: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  inviteCard: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 12,
-    padding: 16,
-  },
-  inviteTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  inviteCodeContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
     marginBottom: 16,
   },
-  inviteCode: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 2,
-  },
-  inviteActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  inviteButton: {
+  sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginHorizontal: 8,
   },
-  inviteButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 6,
+  sectionHeaderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  roommateItem: {
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sectionHeaderAction: {
+    padding: 6,
+  },
+  detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  detailIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  detailLabel: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  detailText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  detailAction: {
+    paddingHorizontal: 8,
+  },
+  detailInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  sectionCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  homeDetails: {},
+  homeFinancials: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingVertical: 10,
+  },
+  financialItem: {
+    minWidth: '45%',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(150, 150, 150, 0.08)',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  financialValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#5C8AFF',
+    marginBottom: 4,
+  },
+  financialLabel: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '500',
+  },
+  inviteCardContainer: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 24,
+    shadowColor: '#546DE5',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  inviteCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  inviteContent: {
+    padding: 20,
+  },
+  inviteTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inviteTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  inviteCodeContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inviteCodeLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  inviteCode: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: 4,
+    marginBottom: 12,
+  },
+  inviteDivider: {
+    width: '30%',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 12,
+  },
+  inviteNote: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    fontSize: 13,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
+  inviteButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  roommateItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  roommateItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.1)',
   },
   roommateAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    marginRight: 16,
   },
-  roommateInitialsAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  roommatePic: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  roommateInitials: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
   roommateInitialsText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#fff',
   },
   roommateInfo: {
-    marginLeft: 14,
     flex: 1,
+  },
+  roommateNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   roommateName: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
+    marginRight: 8,
   },
-  roommateRole: {
-    fontSize: 14,
-    marginBottom: 2,
+  roommateRoleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-  roommateSince: {
+  roommateRoleText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  roommateDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  roommateDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+    marginTop: 4,
+  },
+  roommateDetailText: {
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  roommateAction: {
+    padding: 8,
+  },
+  footer: {
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  appVersion: {
+    marginBottom: 8,
+  },
+  versionText: {
     fontSize: 12,
   },
-  infoCard: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 12,
-    padding: 16,
+  supportButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  infoText: {
+  supportText: {
     fontSize: 14,
-    textAlign: 'center',
+    fontWeight: '500',
   },
 });
 
