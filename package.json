@@ -18,9 +18,10 @@
     "fix-deps": "npx expo install"
   },
   "dependencies": {
-    "@react-navigation/bottom-tabs": "^6.5.11",
-    "@react-navigation/native": "^6.1.9",
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.9.17",
+    "@react-navigation/stack": "^6.4.1",
     "@supabase/supabase-js": "^2.39.3",
     "expo": "~52.0.0",
     "expo-blur": "~14.0.3",
@@ -32,7 +33,7 @@
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
     "react-native": "0.76.8",
-    "react-native-safe-area-context": "4.12.0",
+    "react-native-safe-area-context": "^4.12.0",
     "react-native-screens": "~4.4.0",
     "react-native-svg": "^14.2.0",
     "react-native-url-polyfill": "^2.0.0"

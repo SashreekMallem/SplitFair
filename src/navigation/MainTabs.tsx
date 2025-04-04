@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { View, Text, StyleSheet } from 'react-native';
 import HomeScreen from '../screens/main/HomeScreen';
@@ -7,6 +8,7 @@ import PremiumTabBar from '../components/PremiumTabBar';
 import HomeIsland, { IslandMode } from '../components/HomeIsland';
 import { useNotification } from '../context/NotificationContext';
 import ProfileScreen from '../screens/main/ProfileScreen';
+import ExpensesScreen from '../screens/main/ExpensesScreen';
 
 // Mock data for testing - This would typically come from your data service
 const mockExpenses = [
@@ -107,22 +109,37 @@ const MainTabs: React.FC = () => {
         <Tab.Screen 
           name="Home" 
           component={HomeScreen} 
+          options={{
+            tabBarIcon: ({ color }) => <Ionicons name="home" size={22} color={color} />,
+          }}
         />
         <Tab.Screen 
           name="Schedule" 
           component={() => <ScreenPlaceholder title="Schedule Screen" />} 
+          options={{
+            tabBarIcon: ({ color }) => <Ionicons name="calendar" size={22} color={color} />,
+          }}
         />
         <Tab.Screen 
           name="Expenses" 
-          component={() => <ScreenPlaceholder title="Expenses Screen" />} 
+          component={ExpensesScreen} 
+          options={{
+            tabBarIcon: ({ color }) => <Ionicons name="wallet" size={22} color={color} />,
+          }}
         />
         <Tab.Screen 
           name="Furniture" 
           component={() => <ScreenPlaceholder title="Furniture Screen" />} 
+          options={{
+            tabBarIcon: ({ color }) => <Ionicons name="bed" size={22} color={color} />,
+          }}
         />
         <Tab.Screen 
           name="Maintenance" 
           component={() => <ScreenPlaceholder title="Maintenance Screen" />} 
+          options={{
+            tabBarIcon: ({ color }) => <Ionicons name="hammer" size={22} color={color} />,
+          }}
         />
         {/* Profile screen is removed from tabs, will be accessed via profile icon */}
       </Tab.Navigator>

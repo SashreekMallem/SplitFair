@@ -553,6 +553,23 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     }
   };
   
+  const handleIslandAction = () => {
+    // Update the navigation for expenses mode
+    if (mode === 'expenses') {
+      if (contextMode === 'profile') {
+        // If we're in profile context, just handle the action
+        onActionPress();
+      } else {
+        // If we're in home context, navigate to expenses screen
+        navigation.navigate('Expenses');
+      }
+      return;
+    }
+
+    // Handle other modes
+    onActionPress();
+  };
+
   // Render notification content
   const renderNotificationContent = () => {
     if (!currentNotification) return null;
@@ -679,7 +696,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             
             <TouchableOpacity 
               style={[styles.actionButton, {backgroundColor: colors.accent}]}
-              onPress={onActionPress}
+              onPress={handleIslandAction}
             >
               <Text style={styles.actionButtonText}>{content.actionText}</Text>
               <Ionicons name="arrow-forward" size={16} color="#fff" style={styles.actionButtonIcon} />
@@ -706,7 +723,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             
             <TouchableOpacity 
               style={[styles.actionButton, {backgroundColor: colors.accent}]}
-              onPress={onActionPress}
+              onPress={handleIslandAction}
             >
               <Text style={styles.actionButtonText}>{content.actionText}</Text>
               <Ionicons name="arrow-forward" size={16} color="#fff" style={styles.actionButtonIcon} />
