@@ -46,7 +46,6 @@ const ProfileScreen: React.FC = () => {
     full_name?: string;
     phone_number?: string;
   }>({});
-  const [inviteModalVisible, setInviteModalVisible] = useState<boolean>(false);
   const [editing, setEditing] = useState<boolean>(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -538,6 +537,13 @@ const ProfileScreen: React.FC = () => {
                     {home.name}
                   </Text>
                 </View>
+                
+                <TouchableOpacity 
+                  style={styles.detailEditButton}
+                  onPress={() => showNotification('Edit Home', 'Home name editing will be available soon', 'info')}
+                >
+                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.detailItem}>
@@ -570,6 +576,13 @@ const ProfileScreen: React.FC = () => {
                     {home.country}
                   </Text>
                 </View>
+                
+                <TouchableOpacity 
+                  style={styles.detailEditButton}
+                  onPress={() => showNotification('Edit Address', 'Address editing will be available soon', 'info')}
+                >
+                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.homeFinancials}>
@@ -597,7 +610,7 @@ const ProfileScreen: React.FC = () => {
                   <Text style={styles.financialLabel}>Lease Start</Text>
                 </View>
 
-                {home.lease_end_date && (
+                {home.lease_end_date ? (
                   <View style={styles.financialItem}>
                     <Text style={styles.financialValue}>
                       {new Date(home.lease_end_date).toLocaleDateString('en-US', {
@@ -607,6 +620,14 @@ const ProfileScreen: React.FC = () => {
                     </Text>
                     <Text style={styles.financialLabel}>Lease End</Text>
                   </View>
+                ) : (
+                  <TouchableOpacity 
+                    style={[styles.financialItem, styles.financialAddButton]}
+                    onPress={() => showNotification('Add Lease End Date', 'This feature will be available soon', 'info')}
+                  >
+                    <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+                    <Text style={[styles.financialLabel, {color: theme.colors.primary}]}>Add Lease End</Text>
+                  </TouchableOpacity>
                 )}
               </View>
             </View>
@@ -687,24 +708,6 @@ const ProfileScreen: React.FC = () => {
                   </View>
 
                   <View style={styles.roommateDetails}>
-                    {roommate.rent_contribution > 0 && (
-                      <View style={styles.roommateDetailItem}>
-                        <Ionicons
-                          name="cash-outline"
-                          size={14}
-                          color={isDarkMode ? '#bbb' : '#666'}
-                        />
-                        <Text
-                          style={[
-                            styles.roommateDetailText,
-                            { color: isDarkMode ? '#bbb' : '#666' },
-                          ]}
-                        >
-                          ${roommate.rent_contribution}/month
-                        </Text>
-                      </View>
-                    )}
-
                     <View style={styles.roommateDetailItem}>
                       <Ionicons
                         name="calendar-outline"
@@ -754,15 +757,6 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </Animated.ScrollView>
-
-      <Modal
-        visible={inviteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setInviteModalVisible(false)}
-      >
-        {/* Modal content would go here */}
-      </Modal>
     </View>
   );
 };
@@ -1087,6 +1081,19 @@ const styles = StyleSheet.create({
   supportText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  detailEditButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(84, 109, 229, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  financialAddButton: {
+    backgroundColor: 'rgba(84, 109, 229, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

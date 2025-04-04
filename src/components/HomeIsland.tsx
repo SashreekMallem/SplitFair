@@ -455,15 +455,14 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     
     // If in profile context, show profile-specific content
     if (contextMode === 'profile') {
-      const profileData = getProfileData();
       return {
         title: 'My Profile',
         icon: 'person',
         color: colors.accent,
         gradient: colors.gradient,
-        primaryText: profileData.primary,
-        secondaryText: profileData.secondary,
-        actionText: 'Manage Profile'
+        primaryText: '', // Remove the primary text display in collapsed mode
+        secondaryText: '', // Remove the secondary text display in collapsed mode
+        actionText: ''
       };
     }
     
@@ -585,27 +584,15 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     return (
       <View style={styles.expandedContent} onLayout={onContentLayout}>
         <View style={styles.profileCard}>
-          <View style={styles.profileHeaderRow}>
-            <View style={styles.profileAvatarContainer}>
-              {profile.profile_image_url ? (
-                <Image 
-                  source={{ uri: profile.profile_image_url }} 
-                  style={styles.profileAvatar} 
-                />
-              ) : (
-                <View style={styles.profileInitialsContainer}>
-                  <Text style={styles.profileInitials}>
-                    {profile.full_name.substring(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.profileInfoContainer}>
-              <Text style={[styles.profileName, { color: colors.text }]}>{profile.full_name}</Text>
-              <Text style={[styles.profileEmail, { color: `${colors.text}99` }]}>
-                {profile.email}
-              </Text>
-            </View>
+          {/* Add home name at the top */}
+          <Text style={[styles.homeNameHeader, { color: colors.text }]}>
+            {homeData.name}
+          </Text>
+          
+          <View style={styles.profileInfoContainer}>
+            <Text style={[styles.profileName, { color: colors.text }]}>
+              {profile.full_name}
+            </Text>
           </View>
           
           {/* Invitation code section */}
@@ -643,14 +630,6 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             <Text style={[styles.profileActionText, {color: colors.text}]}>Logout</Text>
           </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, {backgroundColor: colors.accent}]}
-          onPress={onActionPress}
-        >
-          <Text style={styles.actionButtonText}>Manage Profile</Text>
-          <Ionicons name="arrow-forward" size={16} color="#fff" style={styles.actionButtonIcon} />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -858,12 +837,14 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
                 </Animated.View>
                 <View style={styles.textContainer}>
                   <Text style={styles.titleText} numberOfLines={1}>{content.title}</Text>
-                  <View style={styles.statusRow}>
-                    <View style={[styles.statusDot, {backgroundColor: colors.accent}]} />
-                    <Text style={styles.statusText} numberOfLines={1}>
-                      {content.primaryText}
-                    </Text>
-                  </View>
+                  {contextMode !== 'profile' && content.primaryText && (
+                    <View style={styles.statusRow}>
+                      <View style={[styles.statusDot, {backgroundColor: colors.accent}]} />
+                      <Text style={styles.statusText} numberOfLines={1}>
+                        {content.primaryText}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
               
@@ -1187,6 +1168,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 6,
+  },
+  homeNameHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center'
   },
 });
 
