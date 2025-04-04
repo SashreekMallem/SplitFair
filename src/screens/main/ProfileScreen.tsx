@@ -319,6 +319,23 @@ const ProfileScreen: React.FC = () => {
                   styles.iconButton,
                   { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
                 ]}
+                onPress={() => {
+                  const nextMode = islandMode === 'summary' ? 'expenses' : 'summary';
+                  setIslandMode(nextMode);
+                }}
+              >
+                <Ionicons
+                  name={islandMode === 'summary' ? 'home' : 'stats-chart'}
+                  size={20}
+                  color={theme.colors.primary}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
+                ]}
                 onPress={toggleTheme}
               >
                 <Ionicons
@@ -327,6 +344,7 @@ const ProfileScreen: React.FC = () => {
                   color={theme.colors.text}
                 />
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
                   styles.iconButton,
@@ -341,18 +359,20 @@ const ProfileScreen: React.FC = () => {
         </BlurView>
       </Animated.View>
 
-      <HomeIsland
-        mode={islandMode}
-        onModeChange={setIslandMode}
-        onActionPress={handleIslandAction}
-        navigation={navigation}
-        data={{
-          expenses: [],
-          tasks: [],
-          events: [],
-          furniture: [],
-        }}
-      />
+      <View style={styles.islandContainer}>
+        <HomeIsland
+          mode={islandMode}
+          onModeChange={setIslandMode}
+          onActionPress={handleIslandAction}
+          navigation={navigation}
+          data={{
+            expenses: [],
+            tasks: [],
+            events: [],
+            furniture: [],
+          }}
+        />
+      </View>
 
       <Animated.ScrollView
         style={styles.scrollView}
@@ -376,31 +396,7 @@ const ProfileScreen: React.FC = () => {
               Profile
             </Text>
           </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
-              ]}
-              onPress={toggleTheme}
-            >
-              <Ionicons
-                name={isDarkMode ? 'sunny-outline' : 'moon-outline'}
-                size={20}
-                color={theme.colors.text}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
-              ]}
-              onPress={handleLogout}
-            >
-              <Ionicons name="log-out-outline" size={20} color={theme.colors.text} />
-            </TouchableOpacity>
-          </View>
+          <View style={styles.headerSpacer} />
         </View>
 
         <Animated.View
@@ -444,21 +440,49 @@ const ProfileScreen: React.FC = () => {
             </View>
 
             <View style={styles.profileInfo}>
-              {editMode ? (
-                <TextInput
-                  style={[styles.nameInput, { color: theme.colors.text }]}
-                  value={editedProfile.full_name}
-                  onChangeText={(text) =>
-                    setEditedProfile((prev) => ({ ...prev, full_name: text }))
-                  }
-                  placeholder="Your name"
-                  placeholderTextColor="#999"
-                />
-              ) : (
-                <Text style={[styles.profileName, { color: theme.colors.text }]}>
-                  {profile?.full_name || 'User'}
-                </Text>
-              )}
+              <View style={styles.nameEditContainer}>
+                {editMode ? (
+                  <TextInput
+                    style={[styles.nameInput, { color: theme.colors.text }]}
+                    value={editedProfile.full_name}
+                    onChangeText={(text) =>
+                      setEditedProfile((prev) => ({ ...prev, full_name: text }))
+                    }
+                    placeholder="Your name"
+                    placeholderTextColor="#999"
+                  />
+                ) : (
+                  <Text style={[styles.profileName, { color: theme.colors.text }]}>
+                    {profile?.full_name || 'User'}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.inlineEditButton,
+                    editMode
+                      ? { backgroundColor: theme.colors.primary }
+                      : { backgroundColor: isDarkMode ? '#333' : '#f0f0f0' },
+                  ]}
+                  onPress={() => {
+                    if (editMode) {
+                      handleUpdateProfile();
+                    } else {
+                      setEditMode(true);
+                    }
+                  }}
+                  disabled={editing}
+                >
+                  {editing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons
+                      name={editMode ? 'checkmark' : 'pencil'}
+                      size={editMode ? 18 : 16}
+                      color={editMode ? '#fff' : theme.colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
 
               <Text style={[styles.profileEmail, { color: isDarkMode ? '#bbb' : '#666' }]}>
                 {profile?.email || user?.email || 'No email'}
@@ -498,33 +522,6 @@ const ProfileScreen: React.FC = () => {
               </View>
             </View>
           </View>
-
-          <TouchableOpacity
-            style={[
-              styles.editButton,
-              editMode
-                ? { backgroundColor: theme.colors.primary }
-                : { backgroundColor: isDarkMode ? '#333' : '#f0f0f0' },
-            ]}
-            onPress={() => {
-              if (editMode) {
-                handleUpdateProfile();
-              } else {
-                setEditMode(true);
-              }
-            }}
-            disabled={editing}
-          >
-            {editing ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons
-                name={editMode ? 'checkmark' : 'pencil'}
-                size={editMode ? 20 : 18}
-                color={editMode ? '#fff' : theme.colors.primary}
-              />
-            )}
-          </TouchableOpacity>
 
           <View style={styles.profileDetails}>
             <SectionHeader title="Contact Information" icon="person" />
@@ -947,13 +944,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: 250,
+    height: 280,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 170 : 150,
     paddingBottom: 40,
   },
   loadingContainer: {
@@ -1023,6 +1020,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
+  islandContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 105 : 85,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    alignItems: 'center',
+  },
+  headerSpacer: {
+    width: 120,
+  },
   profileHeroCard: {
     marginHorizontal: 20,
     marginBottom: 24,
@@ -1074,6 +1082,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 20,
   },
+  nameEditContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   nameInput: {
     fontSize: 22,
     fontWeight: '700',
@@ -1084,6 +1097,14 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 22,
     fontWeight: '700',
+  },
+  inlineEditButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   profileEmail: {
     fontSize: 14,
@@ -1104,21 +1125,6 @@ const styles = StyleSheet.create({
   profileBadgeText: {
     fontSize: 12,
     fontWeight: '500',
-  },
-  editButton: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
   },
   profileDetails: {
     paddingTop: 8,
