@@ -22,7 +22,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { BlurView } from 'expo-blur';
 import { logDebug, logError } from '../../utils/DebugHelper';
 import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
@@ -51,12 +50,6 @@ const ProfileScreen: React.FC = () => {
   const [editing, setEditing] = useState<boolean>(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
   const fadeInAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(50)).current;
 
@@ -139,35 +132,6 @@ const ProfileScreen: React.FC = () => {
     } finally {
       setEditing(false);
     }
-  };
-
-  const handleShareInviteCode = async () => {
-    try {
-      if (!home) return;
-
-      const message = `Join my home on SplitFair! Use code: ${home.invitation_code}\n\nDownload the app: https://splitfair.app/`;
-
-      const result = await Share.share({
-        message,
-        title: 'SplitFair Home Invitation',
-      });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          showNotification('Success', 'Invitation shared', 'success');
-        }
-      }
-    } catch (error: any) {
-      logError(`Error sharing invite code: ${error.message}`);
-      showNotification('Error', 'Failed to share invitation', 'error');
-    }
-  };
-
-  const handleCopyInviteCode = () => {
-    if (!home) return;
-
-    Clipboard.setString(home.invitation_code);
-    showNotification('Copied', 'Invitation code copied to clipboard', 'success');
   };
 
   const handleLogout = async () => {
@@ -256,6 +220,10 @@ const ProfileScreen: React.FC = () => {
     </View>
   );
 
+  const handleBackPress = () => {
+    navigation.goBack();
+  };
+
   if (loading) {
     return (
       <View
@@ -287,84 +255,19 @@ const ProfileScreen: React.FC = () => {
         style={styles.headerGradient}
       />
 
-      <Animated.View
-        style={[
-          styles.fixedHeader,
-          {
-            opacity: headerOpacity,
-            backgroundColor: isDarkMode
-              ? 'rgba(18, 18, 18, 0.9)'
-              : 'rgba(255, 255, 255, 0.9)',
-          },
-        ]}
-      >
-        <BlurView
-          intensity={isDarkMode ? 40 : 60}
-          tint={isDarkMode ? 'dark' : 'light'}
-          style={styles.blurHeader}
-        >
-          <View style={styles.fixedHeaderContent}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.fixedHeaderTitle, { color: theme.colors.text }]}>
-              Profile
-            </Text>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={[
-                  styles.iconButton,
-                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
-                ]}
-                onPress={() => {
-                  const nextMode = islandMode === 'summary' ? 'expenses' : 'summary';
-                  setIslandMode(nextMode);
-                }}
-              >
-                <Ionicons
-                  name={islandMode === 'summary' ? 'home' : 'stats-chart'}
-                  size={20}
-                  color={theme.colors.primary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.iconButton,
-                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
-                ]}
-                onPress={toggleTheme}
-              >
-                <Ionicons
-                  name={isDarkMode ? 'sunny-outline' : 'moon-outline'}
-                  size={20}
-                  color={theme.colors.text}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.iconButton,
-                  { backgroundColor: isDarkMode ? '#333' : '#f5f5f5' },
-                ]}
-                onPress={handleLogout}
-              >
-                <Ionicons name="log-out-outline" size={20} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </BlurView>
-      </Animated.View>
-
       <View style={styles.islandContainer}>
         <HomeIsland
           mode={islandMode}
           onModeChange={setIslandMode}
           onActionPress={handleIslandAction}
           navigation={navigation}
+          profile={profile}
+          homeData={home}
+          contextMode="profile"
+          onBackPress={handleBackPress}
+          onThemeToggle={toggleTheme}
+          onLogout={handleLogout}
+          isDarkMode={isDarkMode}
           data={{
             expenses: [],
             tasks: [],
@@ -384,21 +287,6 @@ const ProfileScreen: React.FC = () => {
         )}
         scrollEventThrottle={16}
       >
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              Profile
-            </Text>
-          </View>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <Animated.View
           style={[
             styles.profileHeroCard,
@@ -456,6 +344,7 @@ const ProfileScreen: React.FC = () => {
                     {profile?.full_name || 'User'}
                   </Text>
                 )}
+
                 <TouchableOpacity
                   style={[
                     styles.inlineEditButton,
@@ -724,63 +613,6 @@ const ProfileScreen: React.FC = () => {
           </Animated.View>
         )}
 
-        {home && (
-          <Animated.View
-            style={[
-              styles.inviteCardContainer,
-              {
-                opacity: fadeInAnim,
-                transform: [{ translateY: translateYAnim }],
-              },
-            ]}
-          >
-            <LinearGradient
-              colors={
-                isDarkMode
-                  ? ['#3750A8', '#4A61BC', '#5A72D2']
-                  : ['#546DE5', '#606DD0', '#7C8CE9']
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.inviteCard}
-            >
-              <View style={styles.inviteContent}>
-                <View style={styles.inviteTop}>
-                  <Ionicons name="people" size={24} color="#fff" />
-                  <Text style={styles.inviteTitle}>Invite Roommates</Text>
-                </View>
-
-                <View style={styles.inviteCodeContainer}>
-                  <Text style={styles.inviteCodeLabel}>SHARE THIS CODE</Text>
-                  <Text style={styles.inviteCode}>{home.invitation_code}</Text>
-                  <View style={styles.inviteDivider} />
-                  <Text style={styles.inviteNote}>
-                    Friends can join your home by entering this code in the app
-                  </Text>
-                </View>
-
-                <View style={styles.inviteActions}>
-                  <TouchableOpacity
-                    style={styles.inviteButton}
-                    onPress={handleCopyInviteCode}
-                  >
-                    <Ionicons name="copy-outline" size={18} color="#fff" />
-                    <Text style={styles.inviteButtonText}>Copy</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.inviteButton}
-                    onPress={handleShareInviteCode}
-                  >
-                    <Ionicons name="share-social-outline" size={18} color="#fff" />
-                    <Text style={styles.inviteButtonText}>Share</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        )}
-
         {roommates.length > 0 && (
           <Animated.View
             style={[
@@ -944,13 +776,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: 280,
+    height: 300,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 170 : 150,
+    paddingTop: Platform.OS === 'ios' ? 130 : 110,
     paddingBottom: 40,
   },
   loadingContainer: {
@@ -962,74 +794,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
   },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-  },
-  blurHeader: {
-    width: '100%',
-  },
-  fixedHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 10,
-  },
-  fixedHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginLeft: 12,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
   islandContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 105 : 85,
+    top: Platform.OS === 'ios' ? 10 : 90,
     left: 0,
     right: 0,
     zIndex: 50,
     alignItems: 'center',
-  },
-  headerSpacer: {
-    width: 120,
   },
   profileHeroCard: {
     marginHorizontal: 20,
@@ -1084,8 +855,9 @@ const styles = StyleSheet.create({
   },
   nameEditContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   nameInput: {
     fontSize: 22,
@@ -1099,12 +871,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   inlineEditButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   profileEmail: {
     fontSize: 14,
@@ -1227,83 +999,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     fontWeight: '500',
-  },
-  inviteCardContainer: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 24,
-    shadowColor: '#546DE5',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  inviteCard: {
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  inviteContent: {
-    padding: 20,
-  },
-  inviteTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  inviteTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  inviteCodeContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  inviteCodeLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  inviteCode: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: 4,
-    marginBottom: 12,
-  },
-  inviteDivider: {
-    width: '30%',
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    marginBottom: 12,
-  },
-  inviteNote: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  inviteActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  inviteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-  },
-  inviteButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 8,
   },
   roommateItem: {
     flexDirection: 'row',

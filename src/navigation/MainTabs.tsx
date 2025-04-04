@@ -126,20 +126,6 @@ const MainTabs: React.FC = () => {
         />
         {/* Profile screen is removed from tabs, will be accessed via profile icon */}
       </Tab.Navigator>
-
-      {/* Universal Dynamic Island that persists across all tabs */}
-      <HomeIsland 
-        mode={islandMode} 
-        onModeChange={setIslandMode} 
-        onActionPress={handleIslandAction}
-        navigation={Tab} 
-        data={{
-          expenses: mockExpenses,
-          tasks: mockSanitizationTasks,
-          events: mockScheduledTasks,
-          furniture: mockFurniture
-        }}
-      />
     </>
   );
 };

@@ -9,12 +9,15 @@ import {
   Platform,
   PanResponder,
   LayoutChangeEvent,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
+import { UserProfile } from '../services/api/userService';
+import { HomeDetails } from '../services/api/homeService';
 
 const { width } = Dimensions.get('window');
 
@@ -51,6 +54,14 @@ type HomeIslandProps = {
   onActionPress: () => void;
   data?: any;
   navigation?: any; // Add navigation prop
+  contextMode?: 'home' | 'profile'; // Add context mode to change behavior
+  profile?: UserProfile | null; // Profile data for profile context
+  homeData?: HomeDetails | null; // Home data for profile context
+  onBackPress?: () => void; // Add back press handler
+  onThemeToggle?: () => void; // Add theme toggle handler
+  onLogout?: () => void; // Add logout handler
+  onInvitePress?: () => void; // Add invite press handler
+  isDarkMode?: boolean; // Add isDarkMode prop
 };
 
 const HomeIsland: React.FC<HomeIslandProps> = ({
@@ -58,9 +69,17 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   onModeChange,
   onActionPress,
   data,
-  navigation
+  navigation,
+  contextMode = 'home',
+  profile = null,
+  homeData = null,
+  onBackPress,
+  onThemeToggle,
+  onLogout,
+  onInvitePress,
+  isDarkMode = false,
 }) => {
-  const { theme, isDarkMode } = useTheme();
+  const { theme } = useTheme();
   const { currentNotification, hideNotification } = useNotification();
   const [expanded, setExpanded] = useState(false);
   const [currentDataIndex, setCurrentDataIndex] = useState(0);
@@ -169,7 +188,14 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     ]).start();
   }, [mode]);
   
-  // Pan responder for swipe gestures - Modified to only change mode without navigation
+  // Handle back navigation for profile mode
+  const handleBackPress = () => {
+    if (contextMode === 'profile' && onBackPress) {
+      onBackPress();
+    }
+  };
+
+  // Pan responder for swipe gestures - Add support for back navigation
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -186,7 +212,12 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           const nextMode = MODE_CYCLE[mode];
           onModeChange(nextMode);
         } else if (gestureState.dx > 50) {
-          // Swipe right -> previous mode
+          // Swipe right -> previous mode or back in profile mode
+          if (contextMode === 'profile' && onBackPress) {
+            onBackPress(); // Navigate back on swipe right in profile mode
+            return;
+          }
+          
           const prevMode = Object.entries(MODE_CYCLE).find(([_, next]) => next === mode)?.[0] as IslandMode;
           if (prevMode) {
             onModeChange(prevMode);
@@ -290,6 +321,13 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       return getNotificationColors(currentNotification.type);
     }
     
+    // Special profile-specific colors
+    if (contextMode === 'profile') {
+      return isDarkMode 
+        ? { gradient: ['#3E2A63', '#513380', '#6441A5'], accent: '#9F71ED', text: '#F0E6FF' }
+        : { gradient: ['#6441A5', '#7B56C2', '#9F71ED'], accent: '#C7AEFF', text: '#FFFFFF' };
+    }
+    
     switch(modeType) {
       case 'summary':
         return isDarkMode 
@@ -322,8 +360,40 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     }
   };
   
+  // Get profile-specific content data
+  const getProfileData = () => {
+    if (!profile || !homeData) {
+      return {
+        primary: 'No Data',
+        secondary: 'Profile data not loaded'
+      };
+    }
+    
+    const data = [
+      { 
+        primary: homeData.name,
+        secondary: `${homeData.city}, ${homeData.state_province}`
+      },
+      { 
+        primary: `$${homeData.monthly_rent}`,
+        secondary: 'Monthly Rent'
+      },
+      { 
+        primary: profile.full_name,
+        secondary: profile.phone_number || 'Add phone number'
+      }
+    ];
+    
+    return data[currentDataIndex % data.length];
+  };
+  
   // Mock data for different data points to show cycling information
   const getMockData = (modeType: IslandMode, dataIndex: number) => {
+    // If we're in profile context, show profile-specific data
+    if (contextMode === 'profile') {
+      return getProfileData();
+    }
+    
     const data: Record<IslandMode, { primary: string; secondary: string }[]> = {
       summary: [
         { primary: '$124.50', secondary: 'You owe' },
@@ -380,6 +450,20 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         primaryText: currentNotification.title || '',
         secondaryText: currentNotification.message || '',
         actionText: 'Dismiss'
+      };
+    }
+    
+    // If in profile context, show profile-specific content
+    if (contextMode === 'profile') {
+      const profileData = getProfileData();
+      return {
+        title: 'My Profile',
+        icon: 'person',
+        color: colors.accent,
+        gradient: colors.gradient,
+        primaryText: profileData.primary,
+        secondaryText: profileData.secondary,
+        actionText: 'Manage Profile'
       };
     }
     
@@ -493,12 +577,94 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       </View>
     );
   };
+
+  // Render profile-specific content when in profile context
+  const renderProfileContent = () => {
+    if (!profile || !homeData) return null;
+    
+    return (
+      <View style={styles.expandedContent} onLayout={onContentLayout}>
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeaderRow}>
+            <View style={styles.profileAvatarContainer}>
+              {profile.profile_image_url ? (
+                <Image 
+                  source={{ uri: profile.profile_image_url }} 
+                  style={styles.profileAvatar} 
+                />
+              ) : (
+                <View style={styles.profileInitialsContainer}>
+                  <Text style={styles.profileInitials}>
+                    {profile.full_name.substring(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.profileInfoContainer}>
+              <Text style={[styles.profileName, { color: colors.text }]}>{profile.full_name}</Text>
+              <Text style={[styles.profileEmail, { color: `${colors.text}99` }]}>
+                {profile.email}
+              </Text>
+            </View>
+          </View>
+          
+          {/* Invitation code section */}
+          {homeData.invitation_code && (
+            <TouchableOpacity 
+              style={styles.inviteCodeContainer}
+              onPress={onInvitePress}
+            >
+              <Text style={[styles.inviteCodeLabel, { color: `${colors.text}99` }]}>INVITE CODE</Text>
+              <View style={styles.inviteCodeRow}>
+                <Text style={[styles.inviteCode, { color: colors.text }]}>{homeData.invitation_code}</Text>
+                <Ionicons name="copy-outline" size={16} color={colors.accent} />
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {/* Theme toggle and logout buttons */}
+        <View style={styles.profileActionsRow}>
+          <TouchableOpacity 
+            style={[styles.profileActionButton, {backgroundColor: 'rgba(255,255,255,0.1)'}]}
+            onPress={onThemeToggle}
+          >
+            <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={16} color={colors.text} />
+            <Text style={[styles.profileActionText, {color: colors.text}]}>
+              {isDarkMode ? "Light Mode" : "Dark Mode"}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.profileActionButton, {backgroundColor: 'rgba(255,255,255,0.1)'}]}
+            onPress={onLogout}
+          >
+            <Ionicons name="log-out-outline" size={16} color={colors.text} />
+            <Text style={[styles.profileActionText, {color: colors.text}]}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity 
+          style={[styles.actionButton, {backgroundColor: colors.accent}]}
+          onPress={onActionPress}
+        >
+          <Text style={styles.actionButtonText}>Manage Profile</Text>
+          <Ionicons name="arrow-forward" size={16} color="#fff" style={styles.actionButtonIcon} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
   
   // Content for the expanded state with onLayout to measure content
   const renderExpandedContent = () => {
     // If we're in notification mode, show notification content
     if (mode === 'notification') {
       return renderNotificationContent();
+    }
+    
+    // If in profile context, show profile-specific content
+    if (contextMode === 'profile') {
+      return renderProfileContent();
     }
     
     // Otherwise show regular content
@@ -576,14 +742,23 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     // Don't show mode buttons for notifications
     if (mode === 'notification') return null;
     
-    const modes: {mode: IslandMode, icon: string, label: string}[] = [
-      {mode: 'summary', icon: 'home', label: 'Home'},
-      {mode: 'expenses', icon: 'card', label: 'Expenses'},
-      {mode: 'tasks', icon: 'water', label: 'Tasks'},
-      {mode: 'schedule', icon: 'calendar', label: 'Schedule'},
-      {mode: 'alert', icon: 'alert-circle', label: 'Alerts'},
-      {mode: 'notification', icon: 'notifications', label: 'Notifications'},
-    ];
+    // Show profile-specific buttons when in profile context
+    const modes = contextMode === 'profile' 
+      ? [
+          {mode: 'summary', icon: 'person', label: 'Profile'},
+          {mode: 'expenses', icon: 'settings-outline', label: 'Settings'},
+          {mode: 'tasks', icon: 'key-outline', label: 'Security'},
+          {mode: 'schedule', icon: 'help-circle-outline', label: 'Help'},
+          {mode: 'alert', icon: 'log-out-outline', label: 'Logout'},
+        ]
+      : [
+          {mode: 'summary', icon: 'home', label: 'Home'},
+          {mode: 'expenses', icon: 'card', label: 'Expenses'},
+          {mode: 'tasks', icon: 'water', label: 'Tasks'},
+          {mode: 'schedule', icon: 'calendar', label: 'Schedule'},
+          {mode: 'alert', icon: 'alert-circle', label: 'Alerts'},
+          {mode: 'notification', icon: 'notifications', label: 'Notifications'},
+        ];
     
     return (
       <View style={[styles.quickAccessContainer, {borderTopColor: `${colors.text}22`}]}>
@@ -637,7 +812,8 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       style={[
         styles.container, 
         { height: expandedHeight },
-        getShadowStyle()
+        getShadowStyle(),
+        contextMode === 'profile' && styles.profileModeContainer
       ]}
       {...panResponder.panHandlers}
     >
@@ -661,6 +837,17 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
               activeOpacity={0.9}
             >
               <View style={styles.leftContent}>
+                {/* Show back button in profile mode */}
+                {contextMode === 'profile' && onBackPress && (
+                  <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={handleBackPress}
+                    hitSlop={{top: 15, right: 15, bottom: 15, left: 15}}
+                  >
+                    <Ionicons name="chevron-back" size={22} color={colors.text} />
+                  </TouchableOpacity>
+                )}
+                
                 <Animated.View
                   style={[
                     styles.iconContainer,
@@ -713,6 +900,11 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'ios' ? 50 : 30,
     zIndex: 1000,
     position: 'absolute',
+  },
+  // Special styling for profile context
+  profileModeContainer: {
+    width: width - 40,
+    marginHorizontal: 20,
   },
   gradient: {
     flex: 1,
@@ -868,6 +1060,133 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 10,
+  },
+  // New profile-specific styles
+  profileCard: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 14,
+    marginBottom: 12,
+  },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  profileAvatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginRight: 14,
+  },
+  profileAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  profileInitialsContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  profileInitials: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  profileInfoContainer: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 12,
+  },
+  profileStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  profileStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  profileStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  profileStatLabel: {
+    fontSize: 11,
+  },
+  profileStatDivider: {
+    width: 1,
+    height: '80%',
+    marginHorizontal: 10,
+  },
+  inviteCodeContainer: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+  },
+  inviteCodeLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  inviteCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inviteCode: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  profileActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  profileActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    flex: 0.48,  // Allow two buttons with space between
+    justifyContent: 'center',
+  },
+  profileActionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  placeholderContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  backButton: {
+    marginRight: 6,
   },
 });
 

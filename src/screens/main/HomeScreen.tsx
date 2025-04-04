@@ -21,6 +21,7 @@ import { logDebug } from '../../utils/DebugHelper';
 import { useNotification } from '../../context/NotificationContext';
 import { useNavigation } from '@react-navigation/native';
 import { CommonActions } from '@react-navigation/native';
+import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 
 const { width, height } = Dimensions.get('window');
 
@@ -55,6 +56,7 @@ const HomeScreen: React.FC = () => {
   const { showNotification } = useNotification();
   const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation();
+  const [islandMode, setIslandMode] = useState<IslandMode>('summary'); // Add state for island mode
 
   // Animation values
   const headerAnimation = useRef(new Animated.Value(0)).current;
@@ -108,6 +110,30 @@ const HomeScreen: React.FC = () => {
         name: 'ProfileScreen',
       })
     );
+  };
+
+  const handleIslandAction = () => {
+    // Handle actions when the island buttons are pressed
+    switch (islandMode) {
+      case 'summary':
+        showNotification('Home Summary', 'Viewing detailed home overview', 'info');
+        break;
+      case 'expenses':
+        showNotification('Payment', 'Processing payment...', 'success');
+        break;
+      case 'tasks':
+        showNotification('Task', 'Task marked as completed', 'success');
+        break;
+      case 'schedule':
+        showNotification('Reminder', 'Rent reminder set for 3 days before due date', 'info');
+        break;
+      case 'alert':
+        showNotification('Payment', 'Resolving overdue payment...', 'warning');
+        break;
+      case 'furniture':
+        showNotification('Furniture', 'Adding new shared item...', 'info');
+        break;
+    }
   };
 
   const renderExpensesSection = () => {
@@ -428,6 +454,23 @@ const HomeScreen: React.FC = () => {
       />
 
       <StatusBar style="auto" />
+
+      {/* Add HomeIsland component */}
+      <View style={styles.islandContainer}>
+        <HomeIsland
+          mode={islandMode}
+          onModeChange={setIslandMode}
+          onActionPress={handleIslandAction}
+          navigation={navigation}
+          contextMode="home"
+          data={{
+            expenses: mockExpenses,
+            tasks: mockSanitizationTasks,
+            events: mockScheduledTasks,
+            furniture: mockFurniture,
+          }}
+        />
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -887,6 +930,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#9B59B6',
+  },
+  islandContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 10 : 90,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    alignItems: 'center',
   },
 });
 
