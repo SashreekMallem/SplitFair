@@ -108,8 +108,7 @@ export const fetchHomeMembers = async (homeId: string, currentUserId: string): P
     const { data: memberData, error: memberError } = await supabase
       .from('home_members')
       .select('*')  // Simple select without joins
-      .eq('home_id', homeId)
-      .neq('user_id', currentUserId);
+      .eq('home_id', homeId);
       
     if (memberError) {
       logError(`Error fetching home members: ${memberError.message}`);
@@ -120,44 +119,38 @@ export const fetchHomeMembers = async (homeId: string, currentUserId: string): P
       return [];
     }
     
-    // Step 2: Fetch profile data separately for each member
-    const formattedRoommates: HomeMember[] = [];
+    // Filter out current user
+    const otherMembers = memberData.filter(member => member.user_id !== currentUserId);
     
-    for (const member of memberData) {
-      try {
-        // Get user profile for this member
-        const { data: profile, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('full_name, email, profile_image_url')
-          .eq('user_id', member.user_id)
-          .single();
-          
-        if (!profileError && profile) {
-          formattedRoommates.push({
-            ...member,
-            full_name: profile.full_name || 'Unknown',
-            email: profile.email || '',
-            profile_image_url: profile.profile_image_url
-          });
-        } else {
-          // Include member even if profile data can't be fetched
-          formattedRoommates.push({
-            ...member,
-            full_name: 'Unknown User',
-            email: '',
-            profile_image_url: null
-          });
-        }
-      } catch (profileFetchError: any) {
-        logError(`Error fetching profile for user ${member.user_id}: ${profileFetchError.message}`);
-        formattedRoommates.push({
-          ...member,
-          full_name: 'Unknown User',
-          email: '',
-          profile_image_url: null
-        });
-      }
+    // Step 2: Fetch all profiles in a single query to be more efficient
+    const userIds = otherMembers.map(member => member.user_id);
+    const { data: profiles, error: profilesError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .in('user_id', userIds); // This will now work due to the updated policy
+      
+    if (profilesError) {
+      logError(`Error fetching user profiles: ${profilesError.message}`);
+      // Continue with empty profiles array
     }
+    
+    // Create a map of user_id -> profile for easy lookup
+    const profileMap = (profiles || []).reduce((map, profile) => {
+      map[profile.user_id] = profile;
+      return map;
+    }, {} as Record<string, any>);
+    
+    // Step 3: Combine member data with profile data
+    const formattedRoommates = otherMembers.map(member => {
+      const profile = profileMap[member.user_id];
+      return {
+        ...member,
+        // Use full_name from profile; fallback to user_id if missing
+        full_name: profile && profile.full_name ? profile.full_name : member.user_id,
+        email: profile ? profile.email : '',
+        profile_image_url: profile ? profile.profile_image_url : null
+      };
+    });
     
     return formattedRoommates;
   } catch (error: any) {
