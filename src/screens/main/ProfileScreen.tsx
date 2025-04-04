@@ -26,7 +26,7 @@ import { logDebug, logError } from '../../utils/DebugHelper';
 import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 import { fetchUserProfile, updateUserProfile, UserProfile } from '../../services/api/userService';
-import { fetchUserHome, fetchHomeMembers, HomeDetails, HomeMember } from '../../services/api/homeService';
+import { fetchUserHome, fetchHomeMembers, updateHomeDetails, HomeDetails, HomeMember } from '../../services/api/homeService';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +47,10 @@ const ProfileScreen: React.FC = () => {
     phone_number?: string;
   }>({});
   const [editing, setEditing] = useState<boolean>(false);
+
+  const [editHomeMode, setEditHomeMode] = useState<boolean>(false);
+  const [editedHome, setEditedHome] = useState<Partial<HomeDetails>>({});
+  const [savingHome, setSavingHome] = useState<boolean>(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeInAnim = useRef(new Animated.Value(0)).current;
@@ -218,6 +222,64 @@ const ProfileScreen: React.FC = () => {
       )}
     </View>
   );
+
+  const toggleHomeEditMode = () => {
+    if (editHomeMode) {
+      setEditedHome({});
+      setEditHomeMode(false);
+    } else {
+      if (home) {
+        setEditedHome({
+          name: home.name,
+          street_address: home.street_address,
+          unit: home.unit,
+          city: home.city,
+          state_province: home.state_province,
+          zip_postal_code: home.zip_postal_code,
+          country: home.country,
+          monthly_rent: home.monthly_rent,
+          security_deposit: home.security_deposit,
+          lease_start_date: home.lease_start_date,
+          lease_end_date: home.lease_end_date,
+        });
+      }
+      setEditHomeMode(true);
+    }
+  };
+
+  const saveHomeDetails = async () => {
+    if (!home) return;
+
+    try {
+      setSavingHome(true);
+
+      const numericUpdates = {
+        ...editedHome,
+        monthly_rent: typeof editedHome.monthly_rent === 'string'
+          ? parseFloat(editedHome.monthly_rent as string)
+          : editedHome.monthly_rent,
+        security_deposit: typeof editedHome.security_deposit === 'string'
+          ? parseFloat(editedHome.security_deposit as string)
+          : editedHome.security_deposit,
+      };
+
+      const updatedHome = await updateHomeDetails(home.id, numericUpdates);
+
+      if (!updatedHome) {
+        throw new Error('Failed to update home details');
+      }
+
+      setHome(updatedHome);
+      setEditHomeMode(false);
+      setEditedHome({});
+      showNotification('Success', 'Home details updated successfully', 'success');
+    } catch (error: any) {
+      logError(`Error updating home details: ${error.message}`);
+      showNotification('Error', error.message, 'error');
+    } finally {
+      setSavingHome(false);
+    }
+  };
 
   const handleBackPress = () => {
     navigation.goBack();
@@ -508,9 +570,7 @@ const ProfileScreen: React.FC = () => {
             <SectionHeader
               title="Home Details"
               icon="home"
-              action={() =>
-                showNotification('Coming Soon', 'Home editing will be available soon', 'info')
-              }
+              action={toggleHomeEditMode}
             />
 
             <View style={styles.homeDetails}>
@@ -533,17 +593,20 @@ const ProfileScreen: React.FC = () => {
                   >
                     Home Name
                   </Text>
-                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                    {home.name}
-                  </Text>
+                  {editHomeMode ? (
+                    <TextInput
+                      style={[styles.detailInput, { color: theme.colors.text }]}
+                      value={editedHome.name?.toString()}
+                      onChangeText={(text) => setEditedHome(prev => ({ ...prev, name: text }))}
+                      placeholder="Enter home name"
+                      placeholderTextColor="#999"
+                    />
+                  ) : (
+                    <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                      {home.name}
+                    </Text>
+                  )}
                 </View>
-                
-                <TouchableOpacity 
-                  style={styles.detailEditButton}
-                  onPress={() => showNotification('Edit Home', 'Home name editing will be available soon', 'info')}
-                >
-                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.detailItem}>
@@ -565,71 +628,209 @@ const ProfileScreen: React.FC = () => {
                   >
                     Address
                   </Text>
-                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                    {home.street_address}
-                    {home.unit ? `, ${home.unit}` : ''}
-                  </Text>
-                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                    {home.city}, {home.state_province} {home.zip_postal_code}
-                  </Text>
-                  <Text style={[styles.detailText, { color: theme.colors.text }]}>
-                    {home.country}
-                  </Text>
+
+                  {editHomeMode ? (
+                    <>
+                      <TextInput
+                        style={[styles.detailInput, { color: theme.colors.text, marginBottom: 8 }]}
+                        value={editedHome.street_address?.toString()}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, street_address: text }))}
+                        placeholder="Street address"
+                        placeholderTextColor="#999"
+                      />
+
+                      <View style={styles.rowContainer}>
+                        <TextInput
+                          style={[styles.detailInputHalf, { color: theme.colors.text }]}
+                          value={editedHome.unit?.toString() || ''}
+                          onChangeText={(text) => setEditedHome(prev => ({ ...prev, unit: text }))}
+                          placeholder="Unit/Apt (optional)"
+                          placeholderTextColor="#999"
+                        />
+
+                        <TextInput
+                          style={[styles.detailInputHalf, { color: theme.colors.text }]}
+                          value={editedHome.city?.toString()}
+                          onChangeText={(text) => setEditedHome(prev => ({ ...prev, city: text }))}
+                          placeholder="City"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+
+                      <View style={[styles.rowContainer, { marginTop: 8 }]}>
+                        <TextInput
+                          style={[styles.detailInputHalf, { color: theme.colors.text }]}
+                          value={editedHome.state_province?.toString()}
+                          onChangeText={(text) => setEditedHome(prev => ({ ...prev, state_province: text }))}
+                          placeholder="State/Province"
+                          placeholderTextColor="#999"
+                        />
+
+                        <TextInput
+                          style={[styles.detailInputHalf, { color: theme.colors.text }]}
+                          value={editedHome.zip_postal_code?.toString()}
+                          onChangeText={(text) => setEditedHome(prev => ({ ...prev, zip_postal_code: text }))}
+                          placeholder="ZIP/Postal Code"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+
+                      <TextInput
+                        style={[styles.detailInput, { color: theme.colors.text, marginTop: 8 }]}
+                        value={editedHome.country?.toString()}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, country: text }))}
+                        placeholder="Country"
+                        placeholderTextColor="#999"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                        {home.street_address}
+                        {home.unit ? `, ${home.unit}` : ''}
+                      </Text>
+                      <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                        {home.city}, {home.state_province} {home.zip_postal_code}
+                      </Text>
+                      <Text style={[styles.detailText, { color: theme.colors.text }]}>
+                        {home.country}
+                      </Text>
+                    </>
+                  )}
                 </View>
-                
-                <TouchableOpacity 
-                  style={styles.detailEditButton}
-                  onPress={() => showNotification('Edit Address', 'Address editing will be available soon', 'info')}
-                >
-                  <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.homeFinancials}>
                 <View style={styles.financialItem}>
-                  <Text style={styles.financialValue}>
-                    ${home.monthly_rent.toFixed(0)}
-                  </Text>
-                  <Text style={styles.financialLabel}>Monthly Rent</Text>
+                  {editHomeMode ? (
+                    <View style={styles.financialEditItem}>
+                      <Text style={styles.financialLabel}>Monthly Rent</Text>
+                      <TextInput
+                        style={[styles.financialInput, { color: theme.colors.text }]}
+                        value={editedHome.monthly_rent?.toString()}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, monthly_rent: text }))}
+                        placeholder="0.00"
+                        placeholderTextColor="#999"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.financialValue}>
+                        ${home.monthly_rent.toFixed(0)}
+                      </Text>
+                      <Text style={styles.financialLabel}>Monthly Rent</Text>
+                    </>
+                  )}
                 </View>
 
                 <View style={styles.financialItem}>
-                  <Text style={styles.financialValue}>
-                    ${home.security_deposit.toFixed(0)}
-                  </Text>
-                  <Text style={styles.financialLabel}>Security Deposit</Text>
+                  {editHomeMode ? (
+                    <View style={styles.financialEditItem}>
+                      <Text style={styles.financialLabel}>Security Deposit</Text>
+                      <TextInput
+                        style={[styles.financialInput, { color: theme.colors.text }]}
+                        value={editedHome.security_deposit?.toString()}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, security_deposit: text }))}
+                        placeholder="0.00"
+                        placeholderTextColor="#999"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.financialValue}>
+                        ${home.security_deposit.toFixed(0)}
+                      </Text>
+                      <Text style={styles.financialLabel}>Security Deposit</Text>
+                    </>
+                  )}
                 </View>
 
                 <View style={styles.financialItem}>
-                  <Text style={styles.financialValue}>
-                    {new Date(home.lease_start_date).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  <Text style={styles.financialLabel}>Lease Start</Text>
+                  {editHomeMode ? (
+                    <View style={styles.financialEditItem}>
+                      <Text style={styles.financialLabel}>Lease Start</Text>
+                      <TextInput
+                        style={[styles.financialInput, { color: theme.colors.text }]}
+                        value={editedHome.lease_start_date}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, lease_start_date: text }))}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.financialValue}>
+                        {new Date(home.lease_start_date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      <Text style={styles.financialLabel}>Lease Start</Text>
+                    </>
+                  )}
                 </View>
 
-                {home.lease_end_date ? (
-                  <View style={styles.financialItem}>
-                    <Text style={styles.financialValue}>
-                      {new Date(home.lease_end_date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </Text>
-                    <Text style={styles.financialLabel}>Lease End</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity 
-                    style={[styles.financialItem, styles.financialAddButton]}
-                    onPress={() => showNotification('Add Lease End Date', 'This feature will be available soon', 'info')}
-                  >
-                    <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
-                    <Text style={[styles.financialLabel, {color: theme.colors.primary}]}>Add Lease End</Text>
-                  </TouchableOpacity>
-                )}
+                <View style={styles.financialItem}>
+                  {editHomeMode ? (
+                    <View style={styles.financialEditItem}>
+                      <Text style={styles.financialLabel}>Lease End</Text>
+                      <TextInput
+                        style={[styles.financialInput, { color: theme.colors.text }]}
+                        value={editedHome.lease_end_date || ''}
+                        onChangeText={(text) => setEditedHome(prev => ({ ...prev, lease_end_date: text }))}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+                  ) : (
+                    home.lease_end_date ? (
+                      <>
+                        <Text style={styles.financialValue}>
+                          {new Date(home.lease_end_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                        <Text style={styles.financialLabel}>Lease End</Text>
+                      </>
+                    ) : (
+                      <TouchableOpacity 
+                        style={[styles.financialItem, styles.financialAddButton]}
+                        onPress={toggleHomeEditMode}
+                      >
+                        <Ionicons name="add-circle" size={24} color={theme.colors.primary} />
+                        <Text style={[styles.financialLabel, {color: theme.colors.primary}]}>Add Lease End</Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
               </View>
+
+              {editHomeMode && (
+                <View style={styles.editButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.editButton, styles.cancelButton]}
+                    onPress={toggleHomeEditMode}
+                    disabled={savingHome}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.editButton, styles.saveButton]}
+                    onPress={saveHomeDetails}
+                    disabled={savingHome}
+                  >
+                    {savingHome ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </Animated.View>
         )}
@@ -950,10 +1151,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   detailInput: {
-    flex: 1,
-    marginLeft: 12,
     fontSize: 15,
     fontWeight: '500',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  detailInputHalf: {
+    width: '48%',
+    fontSize: 15,
+    fontWeight: '500',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
   },
   sectionCard: {
     marginHorizontal: 20,
@@ -993,6 +1207,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     fontWeight: '500',
+  },
+  financialEditItem: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  financialInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    paddingVertical: 6,
+    textAlign: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.3)',
+    width: '90%',
   },
   roommateItem: {
     flexDirection: 'row',
@@ -1082,13 +1309,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  detailEditButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(84, 109, 229, 0.1)',
+  editButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  editButton: {
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    flex: 1,
+  },
+  saveButton: {
+    backgroundColor: '#5C8AFF',
+    marginLeft: 10,
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(150, 150, 150, 0.15)',
+    marginRight: 10,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '500',
   },
   financialAddButton: {
     backgroundColor: 'rgba(84, 109, 229, 0.08)',
