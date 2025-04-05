@@ -358,50 +358,39 @@ const TasksScheduleScreen: React.FC = () => {
       return;
     }
     
-    console.log("DEBUG: Create Rule button pressed. newRule:", newRule);
-    
     let targetHomeId = homeId;
     
     if (!targetHomeId && user?.id) {
-      console.log("DEBUG: homeId is missing, attempting to fetch from user membership");
       try {
         // Fetch the user's home membership to get the home ID
         const membership = await fetchUserHomeMembership(user.id);
         if (membership && membership.home_id) {
           targetHomeId = membership.home_id;
-          console.log("DEBUG: Retrieved homeId from membership:", targetHomeId);
         } else {
-          console.log("DEBUG: Could not retrieve home membership");
           showNotification('Error', 'You need to be a member of a home to create rules', 'error');
           return;
         }
-      } catch (error: any) {
-        console.log("DEBUG: Error fetching home membership:", error);
+      } catch (error) {
         showNotification('Error', 'Failed to verify home membership', 'error');
         return;
       }
     }
     
     if (!targetHomeId) {
-      console.log("DEBUG: No valid homeId available");
       showNotification('Error', 'Home ID is missing. Cannot create rule.', 'error');
       return;
     }
     
-    console.log("DEBUG: Using homeId:", targetHomeId, "user id:", user?.id);
-    
     try {
-      // Pass the targetHomeId as the second parameter to createRule
       const result = await createRule(
         {
           title: newRule.title,
           description: newRule.description,
           category: newRule.category
         },
-        targetHomeId // Pass the retrieved homeId here
+        targetHomeId
       );
       
-      console.log("DEBUG: createRule returned:", result);
       if (result) {
         setShowNewRuleModal(false);
         setNewRule({
@@ -409,12 +398,8 @@ const TasksScheduleScreen: React.FC = () => {
           description: '',
           category: 'Other'
         });
-        console.log("DEBUG: Rule creation successful, modal closed.");
-      } else {
-        console.log("DEBUG: createRule did not return a valid result.");
       }
     } catch (error: any) {
-      console.log("DEBUG: Error in handleCreateRule:", error);
       showNotification('Error', `Failed to create rule: ${error.message}`, 'error');
     }
   };

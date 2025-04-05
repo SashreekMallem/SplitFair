@@ -4,7 +4,6 @@ import { useNotification } from '../context/NotificationContext';
 import * as houseRulesService from '../services/api/houseRulesService';
 import { fetchUserHomeMembership } from '../services/api/homeService';
 import { HouseRule } from '../services/api/houseRulesService';
-import { logDebug, logError } from '../utils/DebugHelper';
 
 export const useHouseRules = (initialHomeId?: string) => {
   const { user } = useAuth();
@@ -17,29 +16,23 @@ export const useHouseRules = (initialHomeId?: string) => {
   
   // Update homeId if initialHomeId changes
   useEffect(() => {
-    logDebug(`HOUSE_RULES_HOOK: initialHomeId changed to: ${initialHomeId}`);
     setHomeId(initialHomeId);
   }, [initialHomeId]);
 
   // Fetch user's default home if homeId is not provided
   const fetchUserDefaultHome = useCallback(async () => {
     if (!user?.id) {
-      logDebug(`HOUSE_RULES_HOOK: No user logged in, cannot fetch default home`);
       return null;
     }
     
     try {
-      logDebug(`HOUSE_RULES_HOOK: Attempting to fetch user's default home`);
       const membership = await fetchUserHomeMembership(user.id);
       if (membership && membership.home_id) {
-        logDebug(`HOUSE_RULES_HOOK: Found default home: ${membership.home_id}`);
         setHomeId(membership.home_id);
         return membership.home_id;
       }
-      logDebug(`HOUSE_RULES_HOOK: No default home found for user`);
       return null;
-    } catch (err: any) {
-      logError(`HOUSE_RULES_HOOK: Error fetching default home: ${err.message}`);
+    } catch (err) {
       return null;
     }
   }, [user]);
@@ -50,11 +43,9 @@ export const useHouseRules = (initialHomeId?: string) => {
     const homeIdToUse = targetHomeId || homeId;
     
     if (!homeIdToUse) {
-      logDebug('HOUSE_RULES_HOOK: No homeId provided, attempting to fetch user default home');
       const defaultHomeId = await fetchUserDefaultHome();
       
       if (!defaultHomeId) {
-        logDebug('HOUSE_RULES_HOOK: No homeId available, skipping fetch');
         setRules([]);
         setLoading(false);
         return null;
@@ -65,24 +56,20 @@ export const useHouseRules = (initialHomeId?: string) => {
     const effectiveHomeId = targetHomeId || homeId || await fetchUserDefaultHome();
     
     if (!effectiveHomeId) {
-      logDebug('HOUSE_RULES_HOOK: Still no valid homeId, skipping fetch');
       setRules([]);
       setLoading(false);
       return null;
     }
     
     try {
-      logDebug(`HOUSE_RULES_HOOK: Fetching rules for home: ${effectiveHomeId}`);
       setLoading(true);
       setError(null);
       
       const rulesData = await houseRulesService.fetchHouseRules(effectiveHomeId);
-      logDebug(`HOUSE_RULES_HOOK: Fetched ${rulesData.length} rules`);
       setRules(rulesData);
       return rulesData;
     } catch (err: any) {
       setError(err.message || 'Failed to load house rules');
-      logError(`HOUSE_RULES_HOOK: Error in fetchRules: ${err.message}`);
       return null;
     } finally {
       setLoading(false);
@@ -96,10 +83,9 @@ export const useHouseRules = (initialHomeId?: string) => {
       description: string;
       category: string;
     },
-    overrideHomeId?: string // Add this parameter
+    overrideHomeId?: string
   ) => {
     if (!user) {
-      logError(`HOUSE_RULES_HOOK: createRule aborting - no user logged in`);
       return null;
     }
     
@@ -107,18 +93,14 @@ export const useHouseRules = (initialHomeId?: string) => {
     let targetHomeId = overrideHomeId || homeId;
     
     if (!targetHomeId) {
-      logDebug(`HOUSE_RULES_HOOK: No homeId for createRule, attempting to fetch user default`);
       targetHomeId = await fetchUserDefaultHome();
     }
     
     if (!targetHomeId) {
-      logError(`HOUSE_RULES_HOOK: createRule aborting - couldn't resolve a valid homeId`);
       return null;
     }
     
     try {
-      logDebug(`HOUSE_RULES_HOOK: Creating rule for homeId: ${targetHomeId}`);
-      
       const newRule = await houseRulesService.createHouseRule(
         targetHomeId,
         user.id,
@@ -126,8 +108,6 @@ export const useHouseRules = (initialHomeId?: string) => {
       );
       
       if (newRule) {
-        logDebug(`HOUSE_RULES_HOOK: Successfully created rule with ID: ${newRule.id}`);
-        
         // Add the new rule to state with initial data
         const enhancedRule = {
           ...newRule,
@@ -144,20 +124,16 @@ export const useHouseRules = (initialHomeId?: string) => {
         
         setRules(prev => [enhancedRule, ...prev]);
         showNotification('Success', 'House rule created successfully', 'success');
-      } else {
-        logError('HOUSE_RULES_HOOK: createRule service returned null');
       }
       
       return newRule;
     } catch (err: any) {
-      logError(`HOUSE_RULES_HOOK: Error in createRule: ${err.message}`);
-      if (err.stack) logError(`HOUSE_RULES_HOOK: Stack trace: ${err.stack}`);
       showNotification('Error', err.message || 'Failed to create house rule', 'error');
       return null;
     }
   }, [user, homeId, showNotification, fetchUserDefaultHome]);
   
-  // Toggle agreement for a rule - updated to handle null homeId case
+  // Toggle agreement for a rule
   const toggleAgreement = useCallback(async (ruleId: string) => {
     if (!user) return false;
     
@@ -200,15 +176,13 @@ export const useHouseRules = (initialHomeId?: string) => {
       return success;
     } catch (err: any) {
       showNotification('Error', err.message || 'Failed to update agreement', 'error');
-      logError(`HOUSE_RULES_HOOK: Error in toggleAgreement: ${err.message}`);
       return false;
     }
   }, [user, showNotification]);
   
-  // Add a comment to a rule - no changes needed except better error logging
+  // Add a comment to a rule
   const addComment = useCallback(async (ruleId: string, commentText: string) => {
     if (!user) {
-      logError('HOUSE_RULES_HOOK: addComment called but no user is logged in');
       return null;
     }
     
@@ -242,12 +216,11 @@ export const useHouseRules = (initialHomeId?: string) => {
       return comment;
     } catch (err: any) {
       showNotification('Error', err.message || 'Failed to add comment', 'error');
-      logError(`HOUSE_RULES_HOOK: Error in addComment: ${err.message}`);
       return null;
     }
   }, [user, showNotification]);
   
-  // Delete a rule - no changes needed except better error logging
+  // Delete a rule
   const deleteRule = useCallback(async (ruleId: string) => {
     try {
       const success = await houseRulesService.deleteHouseRule(ruleId);
@@ -260,29 +233,24 @@ export const useHouseRules = (initialHomeId?: string) => {
       return success;
     } catch (err: any) {
       showNotification('Error', err.message || 'Failed to delete rule', 'error');
-      logError(`HOUSE_RULES_HOOK: Error in deleteRule: ${err.message}`);
       return false;
     }
   }, [showNotification]);
   
   // Manual refresh function for UI controls
   const refreshRules = useCallback(async () => {
-    logDebug('HOUSE_RULES_HOOK: Manual refresh triggered');
     return fetchRules();
   }, [fetchRules]);
   
   // Load rules on mount and when homeId changes
   useEffect(() => {
     if (homeId) {
-      logDebug(`HOUSE_RULES_HOOK: homeId changed to: ${homeId}, fetching rules`);
       fetchRules();
     } else {
-      logDebug(`HOUSE_RULES_HOOK: homeId changed to: ${homeId}, will attempt to fetch default home`);
       fetchUserDefaultHome().then(defaultHomeId => {
         if (defaultHomeId) {
           fetchRules(defaultHomeId);
         } else {
-          logDebug('HOUSE_RULES_HOOK: No homeId available, clearing rules');
           setRules([]);
         }
       });
@@ -293,10 +261,10 @@ export const useHouseRules = (initialHomeId?: string) => {
     rules,
     loading,
     error,
-    homeId: homeId,  // Expose the homeId we're using
-    setHomeId,       // Allow manually setting homeId
-    fetchRules,      // Expose the fetch function to allow passing a specific homeId
-    refreshRules,    // For convenience in UI components
+    homeId: homeId,
+    setHomeId,
+    fetchRules,
+    refreshRules,
     createRule,
     toggleAgreement,
     addComment,
