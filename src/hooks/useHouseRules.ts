@@ -225,13 +225,22 @@ export const useHouseRules = (initialHomeId?: string) => {
                 const userName = userProfile?.full_name || 
                   (newComment.user_id === user.id ? 'You' : 'Unknown');
                 
+                // Check if this comment already exists in the array
+                const commentExists = rule.comments?.some(c => c.id === newComment.id);
+                if (commentExists) {
+                  // If it exists, just return the rule as is
+                  return rule;
+                }
+                
                 return {
                   ...rule,
                   comments: [
                     ...(rule.comments || []),
                     {
                       ...newComment,
-                      user_name: userName
+                      user_name: userName,
+                      // Add a clientId to ensure uniqueness if needed
+                      clientId: `${newComment.id}-${Date.now()}`
                     }
                   ]
                 };
@@ -321,6 +330,36 @@ export const useHouseRules = (initialHomeId?: string) => {
       return null;
     }
   }, [user, homeId, showNotification, fetchUserDefaultHome]);
+  
+  // Update a rule
+  const updateRule = useCallback(async (
+    ruleId: string,
+    ruleData: {
+      title?: string;
+      description?: string;
+      category?: string;
+    }
+  ) => {
+    try {
+      const updatedRule = await houseRulesService.updateHouseRule(ruleId, ruleData);
+      
+      if (updatedRule) {
+        // Optimistically update the UI
+        setRules(prev => prev.map(rule => 
+          rule.id === ruleId 
+            ? { ...rule, ...ruleData, updated_at: new Date().toISOString() } 
+            : rule
+        ));
+        
+        showNotification('Success', 'House rule updated successfully', 'success');
+      }
+      
+      return updatedRule;
+    } catch (err: any) {
+      showNotification('Error', err.message || 'Failed to update house rule', 'error');
+      return null;
+    }
+  }, [showNotification]);
   
   // Toggle agreement for a rule
   const toggleAgreement = useCallback(async (ruleId: string) => {
@@ -447,6 +486,7 @@ export const useHouseRules = (initialHomeId?: string) => {
     fetchRules,
     refreshRules: fetchRules, // Alias for consistency
     createRule,
+    updateRule, // Add this
     toggleAgreement,
     addComment,
     deleteRule,

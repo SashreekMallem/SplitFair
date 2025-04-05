@@ -12,6 +12,7 @@ import {
   TextInput,
   Modal,
   Switch,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +27,7 @@ import useHomeMembers from '../../hooks/useHomeMembers';
 import UserAvatar from '../../components/common/UserAvatar';
 import { HouseRule, RuleComment } from '../../services/api/houseRulesService';
 import { fetchUserHomeMembership } from '../../services/api/homeService';
+import { createUniqueKey, createStableKey } from '../../utils/keyHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -230,7 +232,14 @@ const TasksScheduleScreen: React.FC = () => {
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
   const [newComment, setNewComment] = useState<string>('');
   const [ruleFilter, setRuleFilter] = useState<string | null>(null);
-  
+  const [showEditRuleModal, setShowEditRuleModal] = useState<boolean>(false);
+  const [ruleToEdit, setRuleToEdit] = useState<HouseRule | null>(null);
+  const [editedRule, setEditedRule] = useState({
+    title: '',
+    description: '',
+    category: 'Other'
+  });
+
   // Get user's home ID
   const homeId = user?.user_metadata?.home_id || '';
   
@@ -241,6 +250,7 @@ const TasksScheduleScreen: React.FC = () => {
     error: rulesError,
     fetchRules: refreshRules,
     createRule,
+    updateRule,
     toggleAgreement,
     addComment,
     deleteRule
@@ -292,13 +302,8 @@ const TasksScheduleScreen: React.FC = () => {
   // Refresh data
   const onRefresh = async () => {
     setRefreshing(true);
-    
-    // Refresh house rules data
     await refreshRules();
-    
-    // Simulate API call for other data
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
     showNotification('Updated', 'Your tasks and schedule have been refreshed', 'success');
     setRefreshing(false);
   };
@@ -328,10 +333,10 @@ const TasksScheduleScreen: React.FC = () => {
       status: 'pending',
       category: newTask.category,
       rotationEnabled: newTask.rotationEnabled,
-      difficulty: 'medium',
-      estimatedTime: 30,
       icon: newTask.icon,
       repeatFrequency: 'weekly',
+      difficulty: 'medium',
+      estimatedTime: 30,
       rotationMembers: newTask.rotationMembers,
       completionHistory: []
     };
@@ -362,7 +367,6 @@ const TasksScheduleScreen: React.FC = () => {
     
     if (!targetHomeId && user?.id) {
       try {
-        // Fetch the user's home membership to get the home ID
         const membership = await fetchUserHomeMembership(user.id);
         if (membership && membership.home_id) {
           targetHomeId = membership.home_id;
@@ -412,7 +416,7 @@ const TasksScheduleScreen: React.FC = () => {
       showNotification('Error', `Failed to update agreement: ${error.message}`, 'error');
     }
   };
-  
+
   // Handle adding comment to a rule - updated to use addComment from hook
   const handleAddComment = async (ruleId: string) => {
     if (!newComment.trim()) return;
@@ -425,18 +429,65 @@ const TasksScheduleScreen: React.FC = () => {
     }
   };
 
+  // Handle editing a rule - updated to use updateRule from hook
+  const handleEditRule = async () => {
+    if (!ruleToEdit || !ruleToEdit.id || !editedRule) {
+      showNotification('Error', 'Invalid rule data', 'error');
+      return;
+    }
+    
+    try {
+      const result = await updateRule(ruleToEdit.id, {
+        title: editedRule.title,
+        description: editedRule.description,
+        category: editedRule.category
+      });
+      
+      if (result) {
+        setShowEditRuleModal(false);
+        setRuleToEdit(null);
+        showNotification('Success', 'Rule updated successfully', 'success');
+      }
+    } catch (error: any) {
+      showNotification('Error', `Failed to update rule: ${error.message}`, 'error');
+    }
+  };
+
+  // Handle initiating rule deletion with confirmation
+  const handleDeleteRule = (ruleId: string) => {
+    Alert.alert(
+      "Delete Rule",
+      "Are you sure you want to delete this rule? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteRule(ruleId);
+            if (success) {
+              showNotification('Success', 'Rule deleted successfully', 'success');
+            } else {
+              showNotification('Error', 'Failed to delete rule', 'error');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Render the Tasks tab content with integrated schedule
   const renderTasksTab = () => {
-    // Get events for the selected date
     const selectedDateStr = selectedDate.toISOString().split('T')[0];
     const selectedDateEvents = events.filter(event => event.date === selectedDateStr);
-    
-    // Filter tasks based on selected filter
     const filteredTasks = tasks.filter(task => {
       if (taskFilter === 'mine') return task.assignedTo === 'You';
-      return true; // 'all' filter
+      return true;
     });
-    
+
     return (
       <View style={styles.tabContent}>
         {/* Calendar View */}
@@ -445,7 +496,9 @@ const TasksScheduleScreen: React.FC = () => {
             Schedule
           </Text>
           <View style={styles.calendarPlaceholder}>
-            <Text style={[styles.placeholderText, { color: theme.colors.text }]}>Week of {selectedDate.toLocaleDateString()}</Text>
+            <Text style={[styles.placeholderText, { color: theme.colors.text }]}>
+              Week of {selectedDate.toLocaleDateString()}
+            </Text>
             <View style={styles.daysRow}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
                 <TouchableOpacity 
@@ -486,7 +539,6 @@ const TasksScheduleScreen: React.FC = () => {
                 <Ionicons name="add-circle-outline" size={22} color={theme.colors.primary} />
               </TouchableOpacity>
             </View>
-            
             {selectedDateEvents.map(event => renderEventItem(event))}
           </View>
         )}
@@ -514,7 +566,6 @@ const TasksScheduleScreen: React.FC = () => {
               My Tasks
             </Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
             style={[
               styles.filterButton,
@@ -527,7 +578,6 @@ const TasksScheduleScreen: React.FC = () => {
               All Tasks
             </Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
             style={[
               styles.filterButton,
@@ -558,7 +608,7 @@ const TasksScheduleScreen: React.FC = () => {
             filteredTasks.map(task => renderTaskItem(task))
           )}
         </View>
-        
+
         {/* Swap Requests Section */}
         {filteredTasks.length > 0 && (
           <View style={styles.swapRequestsContainer}>
@@ -570,7 +620,6 @@ const TasksScheduleScreen: React.FC = () => {
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
-            
             {swapRequests.filter(req => req.requestedTo === 'You' && req.status === 'pending').length === 0 ? (
               <Text style={styles.noSwapRequestsText}>No pending swap requests</Text>
             ) : (
@@ -583,14 +632,12 @@ const TasksScheduleScreen: React.FC = () => {
       </View>
     );
   };
-  
+
   // Render an individual task item
   const renderTaskItem = (task: any) => {
     const isMyTask = task.assignedTo === 'You';
     const isPending = task.status === 'pending';
     const isCompleted = task.status === 'completed';
-    
-    // Calculate days remaining
     const dueDate = new Date(task.dueDate);
     const today = new Date();
     const daysRemaining = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -615,7 +662,6 @@ const TasksScheduleScreen: React.FC = () => {
               color={isCompleted ? '#2EAF89' : '#546DE5'}
             />
           </View>
-          
           <View style={styles.taskTitleContainer}>
             <Text style={[
               styles.taskTitle,
@@ -630,7 +676,6 @@ const TasksScheduleScreen: React.FC = () => {
                 `Due in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}
             </Text>
           </View>
-          
           <View style={styles.taskAssigneeContainer}>
             <Text style={[
               styles.taskAssignee,
@@ -655,7 +700,7 @@ const TasksScheduleScreen: React.FC = () => {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.taskActionButton, styles.swapButton]}
+                style={[styles.taskActionButton, styles.swapButton]} 
                 onPress={() => handleRequestSwap(task.id)}
               >
                 <Ionicons name="swap-horizontal-outline" size={18} color="#fff" />
@@ -663,7 +708,6 @@ const TasksScheduleScreen: React.FC = () => {
               </TouchableOpacity>
             </>
           )}
-          
           {!isMyTask && isCompleted && (
             <TouchableOpacity 
               style={[styles.taskActionButton, styles.evaluateButton]}
@@ -673,7 +717,6 @@ const TasksScheduleScreen: React.FC = () => {
               <Text style={styles.actionButtonText}>Evaluate</Text>
             </TouchableOpacity>
           )}
-          
           {isCompleted && (
             <View style={styles.completedStatusContainer}>
               <Ionicons name="checkmark-circle" size={18} color="#2EAF89" />
@@ -683,7 +726,7 @@ const TasksScheduleScreen: React.FC = () => {
             </View>
           )}
         </View>
-        
+
         {/* Rotation Info */}
         {task.rotationEnabled && (
           <View style={styles.rotationInfo}>
@@ -696,7 +739,7 @@ const TasksScheduleScreen: React.FC = () => {
       </View>
     );
   };
-  
+
   // Render a swap request item
   const renderSwapRequestItem = (request: any) => {
     return (
@@ -714,13 +757,11 @@ const TasksScheduleScreen: React.FC = () => {
             </View>
           )}
         </View>
-        
         <View style={styles.swapRequestActions}>
           <TouchableOpacity 
             style={[styles.swapActionButton, styles.acceptButton]}
             onPress={() => {
               showNotification('Swap Accepted', `You've agreed to swap with ${request.requestedBy}`, 'success');
-              // Update swap request status and reassign task
               setSwapRequests(prev => prev.map(r => r.id === request.id ? {...r, status: 'accepted'} : r));
             }}
           >
@@ -731,7 +772,6 @@ const TasksScheduleScreen: React.FC = () => {
             style={[styles.swapActionButton, styles.rejectButton]}
             onPress={() => {
               showNotification('Swap Declined', `You've declined the swap request from ${request.requestedBy}`, 'info');
-              // Update swap request status
               setSwapRequests(prev => prev.map(r => r.id === request.id ? {...r, status: 'rejected'} : r));
             }}
           >
@@ -756,7 +796,6 @@ const TasksScheduleScreen: React.FC = () => {
         style={[styles.eventCard, { backgroundColor: theme.colors.card }]}
       >
         <View style={[styles.eventColorIndicator, { backgroundColor: getEventTypeColor() }]} />
-        
         <View style={styles.eventContent}>
           <View style={styles.eventHeader}>
             <Text style={[styles.eventTitle, { color: theme.colors.text }]}>
@@ -769,7 +808,6 @@ const TasksScheduleScreen: React.FC = () => {
               </View>
             )}
           </View>
-          
           <View style={styles.eventDetails}>
             <View style={styles.eventDetailItem}>
               <Ionicons name="time-outline" size={14} color="#999" />
@@ -777,7 +815,6 @@ const TasksScheduleScreen: React.FC = () => {
                 {event.isAllDay ? 'All day' : `${event.time}${event.endTime ? ' - ' + event.endTime : ''}`}
               </Text>
             </View>
-            
             {event.location && (
               <View style={styles.eventDetailItem}>
                 <Ionicons name="location-outline" size={14} color="#999" />
@@ -786,7 +823,6 @@ const TasksScheduleScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-            
             <View style={styles.eventDetailItem}>
               <Ionicons name="person-outline" size={14} color="#999" />
               <Text style={styles.eventDetailText}>
@@ -794,13 +830,11 @@ const TasksScheduleScreen: React.FC = () => {
               </Text>
             </View>
           </View>
-          
           {event.description && (
             <Text style={styles.eventDescription}>
               {event.description}
             </Text>
           )}
-          
           {event.attendees && event.attendees.length > 0 && (
             <View style={styles.attendeesContainer}>
               <Text style={styles.attendeesLabel}>
@@ -851,7 +885,6 @@ const TasksScheduleScreen: React.FC = () => {
               All Rules
             </Text>
           </TouchableOpacity>
-          
           {RULE_CATEGORIES.map(category => (
             <TouchableOpacity
               key={category.id}
@@ -888,7 +921,6 @@ const TasksScheduleScreen: React.FC = () => {
               Total Rules
             </Text>
           </View>
-          
           <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
             <Text style={styles.ruleSummaryNumber}>
               {user && houseRules.filter(rule => rule.agreements?.some(a => a.user_id === user.id)).length}
@@ -897,7 +929,6 @@ const TasksScheduleScreen: React.FC = () => {
               Rules You Agreed To
             </Text>
           </View>
-          
           <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
             <Text style={styles.ruleSummaryNumber}>
               {members.length > 0 && houseRules.filter(rule => rule.agreements && rule.agreements.length >= members.length).length}
@@ -912,7 +943,6 @@ const TasksScheduleScreen: React.FC = () => {
           <Text style={[styles.sectionLabel, { color: isDarkMode ? '#999' : '#666' }]}>
             {filteredRules.length} House Rules
           </Text>
-          
           {rulesLoading ? (
             <View style={styles.emptyStateContainer}>
               <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
@@ -933,9 +963,8 @@ const TasksScheduleScreen: React.FC = () => {
             filteredRules.map(rule => renderRuleItem(rule))
           )}
         </View>
-        
         <TouchableOpacity 
-          style={[styles.createRuleButton, { backgroundColor: theme.colors.primary }]}
+          style={[styles.createRuleButton, { backgroundColor: theme.colors.primary }]} 
           onPress={() => setShowNewRuleModal(true)}
         >
           <Ionicons name="add" size={20} color="#fff" />
@@ -944,16 +973,17 @@ const TasksScheduleScreen: React.FC = () => {
       </View>
     );
   };
-  
-  // Render an individual rule item - updated to use real data and UserAvatar
+
+  // Render an individual rule item - updated to include edit/delete options
   const renderRuleItem = (rule: HouseRule) => {
     const category = RULE_CATEGORIES.find(cat => cat.id === rule.category);
     const isExpanded = expandedRule === rule.id;
     const hasAgreed = user && rule.agreements?.some(a => a.user_id === user.id);
+    const isCreator = user && rule.created_by === user.id;
     
     return (
       <View 
-        key={rule.id}
+        key={createStableKey(rule.id, 'rule')}
         style={[
           styles.ruleCard, 
           { backgroundColor: theme.colors.card }
@@ -973,7 +1003,6 @@ const TasksScheduleScreen: React.FC = () => {
               color={category?.color || '#26C6DA'}
             />
           </View>
-          
           <View style={styles.ruleTitleContainer}>
             <Text style={[styles.ruleTitle, { color: theme.colors.text }]}>
               {rule.title}
@@ -983,8 +1012,31 @@ const TasksScheduleScreen: React.FC = () => {
               {rule.agreements ? `${rule.agreements.length} ${rule.agreements.length === 1 ? 'person' : 'people'} agreed` : 'No agreements yet'}
             </Text>
           </View>
-          
           <View style={styles.ruleActions}>
+            {isCreator && (
+              <View style={styles.ruleActionButtons}>
+                <TouchableOpacity 
+                  style={styles.ruleActionButton}
+                  onPress={() => {
+                    setRuleToEdit(rule);
+                    setEditedRule({
+                      title: rule.title,
+                      description: rule.description,
+                      category: rule.category,
+                    });
+                    setShowEditRuleModal(true);
+                  }}
+                >
+                  <Ionicons name="pencil-outline" size={18} color={isDarkMode ? '#999' : '#666'} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.ruleActionButton}
+                  onPress={() => handleDeleteRule(rule.id)}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#EB4D4B" />
+                </TouchableOpacity>
+              </View>
+            )}
             <Ionicons 
               name={isExpanded ? 'chevron-up' : 'chevron-down'} 
               size={20} 
@@ -992,13 +1044,11 @@ const TasksScheduleScreen: React.FC = () => {
             />
           </View>
         </TouchableOpacity>
-        
         {isExpanded && (
           <View style={styles.ruleDetails}>
             <Text style={[styles.ruleDescription, { color: theme.colors.text }]}>
               {rule.description}
             </Text>
-            
             <View style={styles.ruleAgreementStatus}>
               <Text style={[styles.ruleAgreementLabel, { color: isDarkMode ? '#999' : '#666' }]}>
                 Agreements:
@@ -1007,7 +1057,6 @@ const TasksScheduleScreen: React.FC = () => {
                 {members.map(member => {
                   const hasAgreed = rule.agreements?.some(a => a.user_id === member.user_id);
                   const isCurrentUser = user && member.user_id === user.id;
-                  
                   return (
                     <View 
                       key={member.user_id}
@@ -1018,7 +1067,7 @@ const TasksScheduleScreen: React.FC = () => {
                           { backgroundColor: 'rgba(150, 150, 150, 0.1)', borderColor: 'rgba(150, 150, 150, 0.2)' }
                       ]}
                     >
-                      <Text
+                      <Text 
                         style={[
                           styles.ruleAgreementPerson,
                           { color: hasAgreed ? '#2EAF89' : '#999' }
@@ -1034,16 +1083,14 @@ const TasksScheduleScreen: React.FC = () => {
                 })}
               </View>
             </View>
-            
-            {/* Comments section */}
             {rule.comments && rule.comments.length > 0 && (
               <View style={styles.ruleCommentsContainer}>
                 <Text style={[styles.ruleCommentsTitle, { color: theme.colors.text }]}>
                   Discussion:
                 </Text>
-                {rule.comments.map(comment => (
+                {rule.comments.map((comment, index) => (
                   <View 
-                    key={comment.id} 
+                    key={createStableKey(`${comment.id}-${index}`, 'comment')}
                     style={[
                       styles.commentItem,
                       { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }
@@ -1052,17 +1099,12 @@ const TasksScheduleScreen: React.FC = () => {
                     <View style={styles.commentHeader}>
                       <View style={styles.commentUserContainer}>
                         <UserAvatar 
-                          name={comment.user_name || 'Unknown'}
-                          size={24}
                           isCurrentUser={comment.user_id === user?.id}
+                          name={comment.user_name || 'Unknown'}
                         />
                         <Text style={[
                           styles.commentUser, 
-                          { 
-                            color: comment.user_id === user?.id ? 
-                              theme.colors.primary : 
-                              theme.colors.text 
-                          }
+                          { color: comment.user_id === user?.id ? theme.colors.primary : theme.colors.text }
                         ]}>
                           {comment.user_id === user?.id ? 'You' : comment.user_name}
                         </Text>
@@ -1078,8 +1120,6 @@ const TasksScheduleScreen: React.FC = () => {
                 ))}
               </View>
             )}
-            
-            {/* Add comment input */}
             <View style={styles.addCommentContainer}>
               <TextInput
                 style={[
@@ -1104,8 +1144,6 @@ const TasksScheduleScreen: React.FC = () => {
                 <Ionicons name="send" size={16} color="#fff" />
               </TouchableOpacity>
             </View>
-            
-            {/* Agreement button */}
             <TouchableOpacity
               style={[
                 styles.toggleAgreementButton,
@@ -1155,9 +1193,7 @@ const TasksScheduleScreen: React.FC = () => {
                 <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalScrollContent}>
-              {/* Title Input */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Task Title *</Text>
               <TextInput
                 style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
@@ -1166,8 +1202,6 @@ const TasksScheduleScreen: React.FC = () => {
                 value={newTask.title}
                 onChangeText={(text) => setNewTask({...newTask, title: text})}
               />
-
-              {/* Description Input */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description</Text>
               <TextInput
                 style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
@@ -1177,8 +1211,6 @@ const TasksScheduleScreen: React.FC = () => {
                 onChangeText={(text) => setNewTask({...newTask, description: text})}
                 multiline
               />
-
-              {/* Due Date Input */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Due Date</Text>
               <TextInput
                 style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
@@ -1187,8 +1219,6 @@ const TasksScheduleScreen: React.FC = () => {
                 value={newTask.dueDate}
                 onChangeText={(text) => setNewTask({...newTask, dueDate: text})}
               />
-
-              {/* Category Selection */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
               <View style={styles.categoriesContainer}>
                 {['cleaning', 'cooking', 'shopping', 'maintenance', 'other'].map((category) => (
@@ -1211,8 +1241,6 @@ const TasksScheduleScreen: React.FC = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-
-              {/* Assigned To Selection */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Assigned To</Text>
               <View style={styles.assigneeContainer}>
                 {['You', 'Alex', 'Jordan'].map((person) => (
@@ -1235,8 +1263,6 @@ const TasksScheduleScreen: React.FC = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-
-              {/* Rotation Toggle */}
               <View style={styles.rotationToggleContainer}>
                 <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Enable Rotation</Text>
                 <Switch
@@ -1246,8 +1272,6 @@ const TasksScheduleScreen: React.FC = () => {
                   thumbColor={newTask.rotationEnabled ? theme.colors.primary : '#f4f3f4'}
                 />
               </View>
-
-              {/* Rotation Members (if rotation enabled) */}
               {newTask.rotationEnabled && (
                 <View style={styles.rotationMembersContainer}>
                   <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rotation Members</Text>
@@ -1274,7 +1298,6 @@ const TasksScheduleScreen: React.FC = () => {
                 </View>
               )}
             </ScrollView>
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalActionButton, styles.cancelButton]}
@@ -1318,9 +1341,7 @@ const TasksScheduleScreen: React.FC = () => {
                 <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalScrollContent}>
-              {/* Title Input */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
               <TextInput
                 style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
@@ -1329,8 +1350,6 @@ const TasksScheduleScreen: React.FC = () => {
                 value={newRule.title}
                 onChangeText={(text) => setNewRule({...newRule, title: text})}
               />
-
-              {/* Description Input */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
               <TextInput
                 style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
@@ -1340,8 +1359,6 @@ const TasksScheduleScreen: React.FC = () => {
                 onChangeText={(text) => setNewRule({...newRule, description: text})}
                 multiline
               />
-
-              {/* Category Selection */}
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
               <View style={styles.ruleCategoriesSelection}>
                 {RULE_CATEGORIES.map((category) => (
@@ -1371,7 +1388,6 @@ const TasksScheduleScreen: React.FC = () => {
                 ))}
               </View>
             </ScrollView>
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalActionButton, styles.cancelButton]}
@@ -1397,10 +1413,103 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
+  // Render the Edit Rule Modal
+  const renderEditRuleModal = () => {
+    return (
+      <Modal
+        visible={showEditRuleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditRuleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Edit House Rule
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowEditRuleModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollContent}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule title"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={editedRule.title}
+                onChangeText={(text) => setEditedRule(prev => ({...prev, title: text}))}
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
+              <TextInput
+                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule description"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={editedRule.description}
+                onChangeText={(text) => setEditedRule(prev => ({...prev, description: text}))}
+                multiline
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
+              <View style={styles.ruleCategoriesSelection}>
+                {RULE_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.ruleCategoryOption,
+                      editedRule.category === category.id && { backgroundColor: category.color + '20', borderColor: category.color }
+                    ]}
+                    onPress={() => setEditedRule(prev => ({...prev, category: category.id}))}
+                  >
+                    <Ionicons
+                      name={category.icon}
+                      size={20}
+                      color={category.color}
+                      style={styles.ruleCategoryIcon}
+                    />
+                    <Text 
+                      style={[
+                        styles.ruleCategoryOptionText, 
+                        {color: editedRule.category === category.id ? category.color : isDarkMode ? '#999' : '#666'}
+                      ]}
+                    >
+                      {category.id}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalActionButton, styles.cancelButton]}
+                onPress={() => setShowEditRuleModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionButton, 
+                  styles.confirmButton,
+                  (!editedRule.title || !editedRule.description) && styles.disabledButton
+                ]}
+                onPress={handleEditRule}
+                disabled={!editedRule.title || !editedRule.description}
+              >
+                <Text style={styles.confirmButtonText}>Update Rule</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-      
       <LinearGradient
         colors={[
           isDarkMode ? 'rgba(84, 109, 229, 0.15)' : 'rgba(84, 109, 229, 0.08)',
@@ -1411,7 +1520,6 @@ const TasksScheduleScreen: React.FC = () => {
         end={{ x: 0, y: 0.6 }}
         style={styles.headerGradient}
       />
-      
       <View style={styles.islandContainer}>
         <HomeIsland
           mode={islandMode}
@@ -1427,7 +1535,6 @@ const TasksScheduleScreen: React.FC = () => {
           }}
         />
       </View>
-      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -1472,7 +1579,6 @@ const TasksScheduleScreen: React.FC = () => {
                 : 'Establish and manage house rules'}
             </Text>
           </View>
-          
           {MOCK_PENALTY_POINTS['You'] > 0 && (
             <View style={styles.penaltyBadge}>
               <Ionicons name="alert-circle" size={16} color="#EB4D4B" />
@@ -1482,7 +1588,6 @@ const TasksScheduleScreen: React.FC = () => {
             </View>
           )}
         </Animated.View>
-        
         <View style={styles.tabBar}>
           <TouchableOpacity
             style={[
@@ -1509,7 +1614,6 @@ const TasksScheduleScreen: React.FC = () => {
               Tasks & Schedule
             </Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
             style={[
               styles.tabButton,
@@ -1536,7 +1640,6 @@ const TasksScheduleScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
-        
         <Animated.View
           style={[
             styles.tabContentContainer,
@@ -1556,9 +1659,9 @@ const TasksScheduleScreen: React.FC = () => {
           {activeTab === 'tasks' ? renderTasksTab() : renderRulesTab()}
         </Animated.View>
       </ScrollView>
-      
       {renderNewTaskModal()}
       {renderNewRuleModal()}
+      {renderEditRuleModal()}
     </View>
   );
 };
@@ -2080,6 +2183,14 @@ const styles = StyleSheet.create({
   },
   ruleActions: {
     padding: 4,
+  },
+  ruleActionButtons: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  ruleActionButton: {
+    padding: 5,
+    marginLeft: 4,
   },
   ruleDetails: {
     padding: 16,
