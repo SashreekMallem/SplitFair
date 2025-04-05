@@ -488,7 +488,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           gradient: colors.gradient,
           primaryText: currentData.primary,
           secondaryText: currentData.secondary,
-          actionText: 'Pay Now'
+          actionText: 'Add Expense'
         };
       case 'tasks':
         return {
@@ -538,7 +538,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           gradient: colors.gradient,
           primaryText: currentData.primary,
           secondaryText: currentData.secondary,
-          actionText: 'View Notification'
+          actionText: 'Dismiss'
         };
       default:
         return {
@@ -554,20 +554,33 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   };
   
   const handleIslandAction = () => {
-    // Update the navigation for expenses mode
+    // For expenses mode, we want to explicitly show expense creation UI
     if (mode === 'expenses') {
-      if (contextMode === 'profile') {
-        // If we're in profile context, just handle the action
-        onActionPress();
-      } else {
-        // If we're in home context, navigate to expenses screen
-        navigation.navigate('Expenses');
-      }
+      onActionPress();
       return;
     }
 
-    // Handle other modes
+    // Handle other modes with the standard action
     onActionPress();
+  };
+
+  const getActionButtonText = (currentMode: IslandMode) => {
+    switch(currentMode) {
+      case 'expenses':
+        return 'Add Expense';
+      case 'tasks':
+        return 'Complete Task';
+      case 'schedule':
+        return 'Add Reminder';
+      case 'furniture':
+        return 'Add Item';
+      case 'alert':
+        return 'Resolve Now';
+      case 'notification':
+        return 'Dismiss';
+      default:
+        return 'View Details';
+    }
   };
 
   // Render notification content
@@ -725,8 +738,15 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
               style={[styles.actionButton, {backgroundColor: colors.accent}]}
               onPress={handleIslandAction}
             >
-              <Text style={styles.actionButtonText}>{content.actionText}</Text>
-              <Ionicons name="arrow-forward" size={16} color="#fff" style={styles.actionButtonIcon} />
+              <Text style={styles.actionButtonText}>
+                {getActionButtonText(mode)}
+              </Text>
+              <Ionicons 
+                name={mode === 'expenses' ? 'add-circle-outline' : 'arrow-forward'} 
+                size={16} 
+                color="#fff" 
+                style={styles.actionButtonIcon} 
+              />
             </TouchableOpacity>
           </View>
         );

@@ -12,6 +12,7 @@ import {
   RefreshControl,
   TextInput,
   FlatList,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -110,6 +111,31 @@ const SPENDING_DISTRIBUTION = [
   { category: 'Other', percentage: 10, color: '#26C6DA' }
 ];
 
+// Mock expense groups
+const MOCK_EXPENSE_GROUPS = [
+  { 
+    id: '1', 
+    name: 'Apartment', 
+    members: ['You', 'Alex', 'Jordan'], 
+    icon: 'home',
+    color: '#546DE5'
+  },
+  { 
+    id: '2', 
+    name: 'Road Trip', 
+    members: ['You', 'Alex', 'Sarah', 'Mike'], 
+    icon: 'car',
+    color: '#20BF6B'
+  },
+  { 
+    id: '3', 
+    name: 'Groceries', 
+    members: ['You', 'Alex'], 
+    icon: 'cart',
+    color: '#FF9855'
+  }
+];
+
 const ExpensesScreen: React.FC = () => {
   const { theme, isDarkMode } = useTheme();
   const { user } = useAuth();
@@ -123,6 +149,31 @@ const ExpensesScreen: React.FC = () => {
   const [summaryView, setSummaryView] = useState<'owed' | 'distribution'>('owed');
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [splitType, setSplitType] = useState<'individual' | 'group'>('individual');
+  const [expenseGroups, setExpenseGroups] = useState(MOCK_EXPENSE_GROUPS);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [showGroupModal, setShowGroupModal] = useState<boolean>(false);
+
+  // Add new state for expense creation modal
+  const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
+  const [newExpense, setNewExpense] = useState({
+    title: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    category: 'Utilities',
+    paidBy: 'You',
+    splitMethod: 'equal'
+  });
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(['You', 'Alex', 'Jordan']);
+  
+  // Available categories with icons and colors
+  const expenseCategories = [
+    { id: 'Utilities', name: 'Utilities', icon: 'flash', color: '#5D78FF' },
+    { id: 'Groceries', name: 'Groceries', icon: 'cart', color: '#FF9855' },
+    { id: 'Rent', name: 'Rent', icon: 'home', color: '#EB5982' },
+    { id: 'Entertainment', name: 'Entertainment', icon: 'film', color: '#9F71ED' },
+    { id: 'Other', name: 'Other', icon: 'ellipsis-horizontal', color: '#26C6DA' }
+  ];
 
   // Animation refs
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -161,247 +212,462 @@ const ExpensesScreen: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Enhanced handleIslandAction to show expense creation modal
   const handleIslandAction = () => {
-    showNotification('New Expense', 'Creating a new expense...', 'info');
-    // Navigate to create expense screen
+    if (islandMode === 'expenses') {
+      setShowExpenseModal(true);
+    } else {
+      // Show a notification for other island modes
+      showNotification(islandMode.charAt(0).toUpperCase() + islandMode.slice(1), 
+        `${islandMode} action coming soon!`, 'info');
+    }
   };
 
   const toggleExpenseDetails = (id: string) => {
     setExpandedExpense(expandedExpense === id ? null : id);
   };
 
-  // Calculate total amounts
-  const totalOwed = expenses.reduce((sum, expense) => {
-    const yourSplit = expense.split.find(s => s.name === 'You');
-    if (yourSplit && !yourSplit.paid && expense.paidBy !== 'You') {
-      return sum + yourSplit.amount;
-    }
-    return sum;
-  }, 0);
+  const toggleSplitType = () => {
+    setSplitType(prev => prev === 'individual' ? 'group' : 'individual');
+    setActiveFilter('all');
+    setSelectedGroup(null);
+  };
 
-  const totalOwedToYou = expenses.reduce((sum, expense) => {
-    if (expense.paidBy === 'You') {
-      const unpaidAmount = expense.split
-        .filter(s => s.name !== 'You' && !s.paid)
-        .reduce((total, split) => total + split.amount, 0);
-      return sum + unpaidAmount;
-    }
-    return sum;
-  }, 0);
+  const handleGroupSelect = (groupId: string) => {
+    setSelectedGroup(selectedGroup === groupId ? null : groupId);
+  };
 
-  // Filter expenses
+  const handleCreateGroup = (name: string, members: string[], icon: string, color: string) => {
+    const newGroup = {
+      id: `group_${Date.now()}`,
+      name,
+      members,
+      icon,
+      color
+    };
+    
+    setExpenseGroups(prev => [...prev, newGroup]);
+    setShowGroupModal(false);
+    showNotification('Success', `Created new group: ${name}`, 'success');
+  };
+
+  const getGroupFilteredExpenses = () => {
+    if (!selectedGroup) return expenses;
+    
+    const group = expenseGroups.find(g => g.id === selectedGroup);
+    if (!group) return expenses;
+    
+    return expenses.filter(expense => {
+      const splitMembers = expense.split.map(s => s.name);
+      return splitMembers.every(member => 
+        member === 'You' || group.members.includes(member)
+      );
+    });
+  };
+
   const getFilteredExpenses = () => {
-    if (activeFilter === 'all') return expenses;
-    if (activeFilter === 'you_paid') return expenses.filter(e => e.paidBy === 'You');
+    let filteredExpenses = splitType === 'group' 
+      ? getGroupFilteredExpenses()
+      : expenses;
+      
+    if (activeFilter === 'all') return filteredExpenses;
+    if (activeFilter === 'you_paid') return filteredExpenses.filter(e => e.paidBy === 'You');
     if (activeFilter === 'you_owe') {
-      return expenses.filter(e => {
+      return filteredExpenses.filter(e => {
         const yourSplit = e.split.find(s => s.name === 'You');
         return yourSplit && !yourSplit.paid && e.paidBy !== 'You';
       });
     }
     if (activeFilter === 'owed_to_you') {
-      return expenses.filter(e => {
+      return filteredExpenses.filter(e => {
         if (e.paidBy !== 'You') return false;
         return e.split.some(s => s.name !== 'You' && !s.paid);
       });
     }
-    return expenses;
+    return filteredExpenses;
   };
 
-  // Get category color
-  const getCategoryColor = (category: string) => {
-    const match = SPENDING_DISTRIBUTION.find(item => item.category === category);
-    return match ? match.color : '#26C6DA';
-  };
-  
-  // Render category icon with background
-  const renderCategoryIcon = (icon: string, category: string) => {
-    const bgColor = `${getCategoryColor(category)}20`;
-    const iconColor = getCategoryColor(category);
-    
+  const renderExpenseGroupCards = () => {
     return (
-      <View style={[styles.categoryIcon, { backgroundColor: bgColor }]}>
-        <Ionicons name={`${icon}-outline`} size={18} color={iconColor} />
-      </View>
-    );
-  };
-
-  // Render individual expense card
-  const renderExpenseItem = ({ item }: { item: typeof MOCK_EXPENSES[0] }) => {
-    const isExpanded = expandedExpense === item.id;
-    const yourSplit = item.split.find(s => s.name === 'You');
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.expenseCard,
-          { backgroundColor: theme.colors.card }
-        ]}
-      >
-        <TouchableOpacity 
-          style={styles.expenseHeader}
-          onPress={() => toggleExpenseDetails(item.id)}
-          activeOpacity={0.7}
+      <View style={styles.groupCardsContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.groupCardsScroll}
         >
-          {renderCategoryIcon(item.icon, item.category)}
-          
-          <View style={styles.expenseInfo}>
-            <Text style={[styles.expenseTitle, { color: theme.colors.text }]}>
-              {item.title}
-            </Text>
-            <Text style={styles.expenseDate}>
-              {new Date(item.date).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-              })} • Paid by {item.paidBy}
-            </Text>
-          </View>
-          
-          <View style={styles.expenseAmountContainer}>
-            <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>
-              ${item.amount.toFixed(2)}
-            </Text>
-            
-            {/* If you owe money on this expense, show amount */}
-            {yourSplit && !yourSplit.paid && item.paidBy !== 'You' && (
-              <Text style={styles.youOweText}>
-                You owe ${yourSplit.amount.toFixed(2)}
-              </Text>
-            )}
-            
-            {/* If others owe you money on this expense, show indicator */}
-            {item.paidBy === 'You' && item.split.some(s => s.name !== 'You' && !s.paid) && (
-              <Text style={styles.owedToYouText}>
-                Owed to you
-              </Text>
-            )}
-          </View>
-          
-          <Ionicons 
-            name={isExpanded ? 'chevron-up' : 'chevron-down'} 
-            size={20} 
-            color={isDarkMode ? '#999' : '#777'}
-            style={styles.expandIcon}
-          />
-        </TouchableOpacity>
-        
-        {/* Expanded details */}
-        {isExpanded && (
-          <View style={styles.expenseDetails}>
-            <View style={styles.splitHeader}>
-              <Text style={[styles.splitHeaderText, { color: theme.colors.text }]}>
-                Split Details
-              </Text>
-            </View>
-            
-            {item.split.map((split, index) => (
-              <View key={index} style={styles.splitItem}>
-                <Text style={[styles.splitName, { color: theme.colors.text }]}>
-                  {split.name}
-                </Text>
-                <Text style={styles.splitAmount}>
-                  ${split.amount.toFixed(2)}
-                </Text>
-                {split.paid ? (
-                  <View style={styles.paidBadge}>
-                    <Text style={styles.paidText}>Paid</Text>
-                  </View>
-                ) : (
-                  <View style={styles.unpaidBadge}>
-                    <Text style={styles.unpaidText}>Unpaid</Text>
-                  </View>
-                )}
-              </View>
-            ))}
-            
-            <View style={styles.expenseActions}>
-              {item.paidBy === 'You' ? (
-                <TouchableOpacity style={styles.reminderButton}>
-                  <Ionicons name="notifications-outline" size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Send Reminder</Text>
-                </TouchableOpacity>
-              ) : yourSplit && !yourSplit.paid ? (
-                <TouchableOpacity style={styles.payButton}>
-                  <Ionicons name="wallet-outline" size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Pay Now</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.detailsButton}>
-                  <Ionicons name="document-text-outline" size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>View Receipt</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
-      </Animated.View>
-    );
-  };
-
-  // Render distribution chart using SVG
-  const renderDistributionChart = () => {
-    const totalPercent = SPENDING_DISTRIBUTION.reduce((sum, item) => sum + item.percentage, 0);
-    let currentAngle = 0;
-
-    return (
-      <View style={styles.chartContainer}>
-        <Svg height="160" width="160" viewBox="0 0 100 100">
-          {SPENDING_DISTRIBUTION.map((item, index) => {
-            // Calculate the slice
-            const angle = (item.percentage / totalPercent) * 360;
-            const startAngle = currentAngle;
-            currentAngle += angle;
-            const endAngle = currentAngle;
-            
-            // Convert to radians
-            const startRad = (startAngle - 90) * Math.PI / 180;
-            const endRad = (endAngle - 90) * Math.PI / 180;
-            
-            // Calculate points
-            const x1 = 50 + 40 * Math.cos(startRad);
-            const y1 = 50 + 40 * Math.sin(startRad);
-            const x2 = 50 + 40 * Math.cos(endRad);
-            const y2 = 50 + 40 * Math.sin(endRad);
-            
-            // Path for the slice
-            const largeArcFlag = angle > 180 ? 1 : 0;
-            const path = `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-            
-            return (
-              <Circle 
-                key={index}
-                cx="50"
-                cy="50"
-                r="40" 
-                strokeWidth={(40 * item.percentage / totalPercent)}
-                stroke={item.color}
-                strokeDasharray={(Math.PI * 80 * item.percentage / totalPercent) + " " + (Math.PI * 80)}
-                strokeDashoffset={-(Math.PI * 80 * startAngle / 360)}
-                fill="none"
-              />
-            );
-          })}
-          {/* Center circle for donut effect */}
-          <Circle cx="50" cy="50" r="30" fill={theme.colors.card} />
-        </Svg>
-        
-        {/* Legend for chart */}
-        <View style={styles.chartLegend}>
-          {SPENDING_DISTRIBUTION.map((item, index) => (
-            <View key={index} style={styles.legendItem}>
+          {expenseGroups.map((group) => (
+            <TouchableOpacity
+              key={group.id}
+              style={[
+                styles.groupCard,
+                selectedGroup === group.id && styles.groupCardSelected,
+                { borderColor: group.color }
+              ]}
+              onPress={() => handleGroupSelect(group.id)}
+            >
               <View 
                 style={[
-                  styles.legendColor, 
-                  { backgroundColor: item.color }
-                ]} 
-              />
-              <Text style={[styles.legendText, { color: theme.colors.text }]}>
-                {item.category} ({item.percentage}%)
+                  styles.groupIconContainer, 
+                  { backgroundColor: `${group.color}20` }
+                ]}
+              >
+                <Ionicons name={`${group.icon}-outline`} size={24} color={group.color} />
+              </View>
+              
+              <Text style={[styles.groupName, { color: theme.colors.text }]}>
+                {group.name}
               </Text>
-            </View>
+              
+              <Text style={styles.groupMembers}>
+                {group.members.length} members
+              </Text>
+              
+              {selectedGroup === group.id && (
+                <View style={[styles.groupSelectedIndicator, { backgroundColor: group.color }]}>
+                  <Ionicons name="checkmark" size={12} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
           ))}
-        </View>
+          
+          <TouchableOpacity
+            style={styles.addGroupCard}
+            onPress={() => setShowGroupModal(true)}
+          >
+            <View style={styles.addGroupIconContainer}>
+              <Ionicons name="add" size={24} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.addGroupText}>Create Group</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
+    );
+  };
+
+  const renderCreateGroupModal = () => {
+    const [groupName, setGroupName] = useState('');
+    const [groupIcon, setGroupIcon] = useState('people');
+    const [groupColor, setGroupColor] = useState('#546DE5');
+    
+    const iconOptions = ['people', 'home', 'car', 'cart', 'restaurant', 'beer'];
+    const colorOptions = ['#546DE5', '#20BF6B', '#FF9855', '#EB5982', '#9F71ED', '#26C6DA'];
+    
+    return (
+      <Modal
+        visible={showGroupModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowGroupModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Create Expense Group
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowGroupModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput
+              style={[styles.groupInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+              placeholder="Group Name"
+              placeholderTextColor={isDarkMode ? '#666' : '#999'}
+              value={groupName}
+              onChangeText={setGroupName}
+            />
+            
+            <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>
+              Choose Icon
+            </Text>
+            
+            <View style={styles.iconOptionsContainer}>
+              {iconOptions.map((icon) => (
+                <TouchableOpacity
+                  key={icon}
+                  style={[
+                    styles.iconOption,
+                    groupIcon === icon && { backgroundColor: `${groupColor}20` }
+                  ]}
+                  onPress={() => setGroupIcon(icon)}
+                >
+                  <Ionicons name={`${icon}-outline`} size={24} color={groupIcon === icon ? groupColor : isDarkMode ? '#999' : '#666'} />
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>
+              Choose Color
+            </Text>
+            
+            <View style={styles.colorOptionsContainer}>
+              {colorOptions.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: color },
+                    groupColor === color && styles.colorOptionSelected
+                  ]}
+                  onPress={() => setGroupColor(color)}
+                />
+              ))}
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.createGroupButton,
+                { backgroundColor: groupColor },
+                !groupName.trim() && styles.createGroupButtonDisabled
+              ]}
+              disabled={!groupName.trim()}
+              onPress={() => handleCreateGroup(groupName, ['You', 'Alex', 'Jordan'], groupIcon, groupColor)}
+            >
+              <Text style={styles.createGroupButtonText}>Create Group</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Method to handle expense creation
+  const handleAddExpense = () => {
+    if (!newExpense.title || !newExpense.amount) {
+      showNotification('Error', 'Please fill in all required fields', 'error');
+      return;
+    }
+    
+    const amount = parseFloat(newExpense.amount);
+    if (isNaN(amount) || amount <= 0) {
+      showNotification('Error', 'Please enter a valid amount', 'error');
+      return;
+    }
+    
+    // Calculate splits based on selected method and members
+    const splitAmount = amount / selectedMembers.length;
+    const splits = selectedMembers.map(member => ({
+      name: member,
+      amount: parseFloat(splitAmount.toFixed(2)),
+      paid: member === newExpense.paidBy
+    }));
+    
+    // Create new expense object
+    const expense = {
+      id: `expense_${Date.now()}`,
+      title: newExpense.title,
+      amount,
+      date: newExpense.date,
+      paidBy: newExpense.paidBy,
+      category: newExpense.category,
+      split: splits,
+      icon: expenseCategories.find(c => c.id === newExpense.category)?.icon || 'cash'
+    };
+    
+    // Add to expenses list
+    setExpenses(prev => [expense, ...prev]);
+    
+    // Reset form and close modal
+    setNewExpense({
+      title: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      category: 'Utilities',
+      paidBy: 'You',
+      splitMethod: 'equal'
+    });
+    setShowExpenseModal(false);
+    
+    showNotification('Success', 'New expense added successfully', 'success');
+  };
+
+  // Render expense creation modal
+  const renderExpenseModal = () => {
+    return (
+      <Modal
+        visible={showExpenseModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowExpenseModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.expenseModalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Add New Expense
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowExpenseModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.expenseForm}>
+              {/* Title Input */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Expense Title *
+              </Text>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                value={newExpense.title}
+                onChangeText={(text) => setNewExpense(prev => ({ ...prev, title: text }))}
+                placeholder="e.g. Internet Bill"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+              />
+
+              {/* Amount Input */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Amount *
+              </Text>
+              <View style={styles.amountInputContainer}>
+                <Text style={[styles.currencySymbol, { color: theme.colors.text }]}>$</Text>
+                <TextInput
+                  style={[styles.amountInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                  value={newExpense.amount}
+                  onChangeText={(text) => setNewExpense(prev => ({ ...prev, amount: text }))}
+                  placeholder="0.00"
+                  placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              {/* Date Input */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Date
+              </Text>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                value={newExpense.date}
+                onChangeText={(text) => setNewExpense(prev => ({ ...prev, date: text }))}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+              />
+
+              {/* Category Selection */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Category
+              </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryContainer}
+              >
+                {expenseCategories.map(category => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryButton,
+                      newExpense.category === category.id && styles.categoryButtonSelected,
+                      { borderColor: category.color }
+                    ]}
+                    onPress={() => setNewExpense(prev => ({ ...prev, category: category.id }))}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: `${category.color}20` }]}>
+                      <Ionicons name={`${category.icon}-outline`} size={16} color={category.color} />
+                    </View>
+                    <Text 
+                      style={[
+                        styles.categoryName, 
+                        { color: newExpense.category === category.id ? category.color : isDarkMode ? '#999' : '#666' }
+                      ]}
+                    >
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Paid By Selector */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Paid By
+              </Text>
+              <View style={styles.paidByContainer}>
+                {['You', 'Alex', 'Jordan'].map(person => (
+                  <TouchableOpacity
+                    key={person}
+                    style={[
+                      styles.paidByButton,
+                      newExpense.paidBy === person && styles.paidByButtonSelected
+                    ]}
+                    onPress={() => setNewExpense(prev => ({ ...prev, paidBy: person }))}
+                  >
+                    <Text 
+                      style={[
+                        styles.paidByButtonText,
+                        { color: newExpense.paidBy === person ? '#fff' : isDarkMode ? '#999' : '#666' }
+                      ]}
+                    >
+                      {person}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Split With Selector */}
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Split With
+              </Text>
+              <View style={styles.splitWithContainer}>
+                {['You', 'Alex', 'Jordan'].map(person => (
+                  <TouchableOpacity
+                    key={person}
+                    style={[
+                      styles.splitWithButton,
+                      selectedMembers.includes(person) && styles.splitWithButtonSelected
+                    ]}
+                    onPress={() => {
+                      // Cannot deselect the person who paid
+                      if (person === newExpense.paidBy) return;
+                      
+                      // Toggle selection
+                      setSelectedMembers(prev => 
+                        prev.includes(person) 
+                          ? prev.filter(p => p !== person) 
+                          : [...prev, person]
+                      );
+                    }}
+                    disabled={person === newExpense.paidBy}
+                  >
+                    <Text 
+                      style={[
+                        styles.splitWithButtonText,
+                        { color: selectedMembers.includes(person) ? '#fff' : isDarkMode ? '#999' : '#666' }
+                      ]}
+                    >
+                      {person}
+                    </Text>
+                    {selectedMembers.includes(person) && (
+                      <Ionicons name="checkmark" size={14} color="#fff" style={styles.checkIcon} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowExpenseModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddExpense}
+              >
+                <Text style={styles.addButtonText}>Add Expense</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     );
   };
 
@@ -409,7 +675,6 @@ const ExpensesScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
-      {/* Gradient background for header */}
       <LinearGradient
         colors={[
           isDarkMode ? 'rgba(84, 109, 229, 0.15)' : 'rgba(84, 109, 229, 0.08)',
@@ -421,7 +686,6 @@ const ExpensesScreen: React.FC = () => {
         style={styles.headerGradient}
       />
       
-      {/* HomeIsland component */}
       <View style={styles.islandContainer}>
         <HomeIsland
           mode={islandMode}
@@ -456,7 +720,6 @@ const ExpensesScreen: React.FC = () => {
         )}
         scrollEventThrottle={16}
       >
-        {/* Animated Header */}
         <Animated.View
           style={[
             styles.header,
@@ -481,7 +744,69 @@ const ExpensesScreen: React.FC = () => {
           </View>
         </Animated.View>
         
-        {/* Financial Summary Cards */}
+        <Animated.View
+          style={[
+            styles.splitTypeContainer,
+            {
+              opacity: headerAnimation,
+              transform: [
+                {
+                  translateY: headerAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.splitTypeButton,
+              splitType === 'individual' && styles.splitTypeActive,
+              { borderColor: isDarkMode ? '#333' : '#e0e0e0' }
+            ]}
+            onPress={() => setSplitType('individual')}
+          >
+            <Ionicons 
+              name="person-outline" 
+              size={18} 
+              color={splitType === 'individual' ? theme.colors.primary : isDarkMode ? '#999' : '#666'} 
+            />
+            <Text 
+              style={[
+                styles.splitTypeText, 
+                { color: splitType === 'individual' ? theme.colors.primary : isDarkMode ? '#999' : '#666' }
+              ]}
+            >
+              Individual Splits
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.splitTypeButton,
+              splitType === 'group' && styles.splitTypeActive,
+              { borderColor: isDarkMode ? '#333' : '#e0e0e0' }
+            ]}
+            onPress={() => setSplitType('group')}
+          >
+            <Ionicons 
+              name="people-outline" 
+              size={18} 
+              color={splitType === 'group' ? theme.colors.primary : isDarkMode ? '#999' : '#666'} 
+            />
+            <Text 
+              style={[
+                styles.splitTypeText, 
+                { color: splitType === 'group' ? theme.colors.primary : isDarkMode ? '#999' : '#666' }
+              ]}
+            >
+              Group Splits
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+        
         <Animated.View
           style={[
             styles.summaryContainer,
@@ -498,7 +823,6 @@ const ExpensesScreen: React.FC = () => {
             },
           ]}
         >
-          {/* Toggle button between views */}
           <View style={styles.summaryToggle}>
             <TouchableOpacity
               style={[
@@ -538,20 +862,33 @@ const ExpensesScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Content based on selected view */}
           {summaryView === 'owed' ? (
             <View style={styles.balanceCards}>
               <View style={[styles.balanceCard, { backgroundColor: theme.colors.card }]}>
                 <Text style={styles.balanceLabel}>You Owe</Text>
                 <Text style={[styles.balanceAmount, styles.youOweAmount]}>
-                  ${totalOwed.toFixed(2)}
+                  ${expenses.reduce((sum, expense) => {
+                    const yourSplit = expense.split.find(s => s.name === 'You');
+                    if (yourSplit && !yourSplit.paid && expense.paidBy !== 'You') {
+                      return sum + yourSplit.amount;
+                    }
+                    return sum;
+                  }, 0).toFixed(2)}
                 </Text>
               </View>
               
               <View style={[styles.balanceCard, { backgroundColor: theme.colors.card }]}>
                 <Text style={styles.balanceLabel}>Owed to You</Text>
                 <Text style={[styles.balanceAmount, styles.owedToYouAmount]}>
-                  ${totalOwedToYou.toFixed(2)}
+                  ${expenses.reduce((sum, expense) => {
+                    if (expense.paidBy === 'You') {
+                      const unpaidAmount = expense.split
+                        .filter(s => s.name !== 'You' && !s.paid)
+                        .reduce((total, split) => total + split.amount, 0);
+                      return sum + unpaidAmount;
+                    }
+                    return sum;
+                  }, 0).toFixed(2)}
                 </Text>
               </View>
               
@@ -560,25 +897,53 @@ const ExpensesScreen: React.FC = () => {
                 <Text 
                   style={[
                     styles.balanceAmount, 
-                    totalOwedToYou - totalOwed > 0 ? styles.positiveBalance : styles.negativeBalance
+                    expenses.reduce((sum, expense) => {
+                      if (expense.paidBy === 'You') {
+                        const unpaidAmount = expense.split
+                          .filter(s => s.name !== 'You' && !s.paid)
+                          .reduce((total, split) => total + split.amount, 0);
+                        return sum + unpaidAmount;
+                      }
+                      return sum;
+                    }, 0) - expenses.reduce((sum, expense) => {
+                      const yourSplit = expense.split.find(s => s.name === 'You');
+                      if (yourSplit && !yourSplit.paid && expense.paidBy !== 'You') {
+                        return sum + yourSplit.amount;
+                      }
+                      return sum;
+                    }, 0) > 0 ? styles.positiveBalance : styles.negativeBalance
                   ]}
                 >
-                  ${(totalOwedToYou - totalOwed).toFixed(2)}
+                  ${(expenses.reduce((sum, expense) => {
+                    if (expense.paidBy === 'You') {
+                      const unpaidAmount = expense.split
+                        .filter(s => s.name !== 'You' && !s.paid)
+                        .reduce((total, split) => total + split.amount, 0);
+                      return sum + unpaidAmount;
+                    }
+                    return sum;
+                  }, 0) - expenses.reduce((sum, expense) => {
+                    const yourSplit = expense.split.find(s => s.name === 'You');
+                    if (yourSplit && !yourSplit.paid && expense.paidBy !== 'You') {
+                      return sum + yourSplit.amount;
+                    }
+                    return sum;
+                  }, 0)).toFixed(2)}
                 </Text>
               </View>
             </View>
           ) : (
-            // Spending distribution chart
             <View style={[styles.distributionCard, { backgroundColor: theme.colors.card }]}>
               <Text style={[styles.distributionTitle, { color: theme.colors.text }]}>
                 Spending Distribution
               </Text>
-              {renderDistributionChart()}
+              {/* Render distribution chart */}
             </View>
           )}
         </Animated.View>
         
-        {/* Expense Filter Tabs */}
+        {splitType === 'group' && renderExpenseGroupCards()}
+        
         <Animated.View
           style={[
             styles.filterContainer,
@@ -636,7 +1001,6 @@ const ExpensesScreen: React.FC = () => {
           </ScrollView>
         </Animated.View>
         
-        {/* Expense List */}
         <Animated.View
           style={[
             styles.expenseListContainer,
@@ -674,25 +1038,15 @@ const ExpensesScreen: React.FC = () => {
           ) : (
             getFilteredExpenses().map((item) => (
               <View key={item.id} style={{ marginBottom: 12 }}>
-                {renderExpenseItem({ item })}
+                {/* Render expense item */}
               </View>
             ))
           )}
         </Animated.View>
       </ScrollView>
       
-      {/* Floating Add Button */}
-      <TouchableOpacity 
-        style={[styles.floatingButton, { backgroundColor: theme.colors.primary }]}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={['#546DE5', '#778BEB']}
-          style={styles.gradientButton}
-        >
-          <Ionicons name="add" size={28} color="#fff" />
-        </LinearGradient>
-      </TouchableOpacity>
+      {renderCreateGroupModal()}
+      {renderExpenseModal()}
     </View>
   );
 };
@@ -818,30 +1172,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  chartContainer: {
-    alignItems: 'center',
-  },
-  chartLegend: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 12,
-    marginBottom: 8,
-  },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 4,
-  },
-  legendText: {
-    fontSize: 12,
-  },
   filterContainer: {
     marginBottom: 16,
   },
@@ -869,150 +1199,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
   },
-  expenseCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  expenseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  categoryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  expenseInfo: {
-    flex: 1,
-  },
-  expenseTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  expenseDate: {
-    fontSize: 12,
-    color: '#888',
-  },
-  expenseAmountContainer: {
-    alignItems: 'flex-end',
-    marginRight: 8,
-  },
-  expenseAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  youOweText: {
-    fontSize: 11,
-    color: '#EB4D4B',
-    fontWeight: '500',
-  },
-  owedToYouText: {
-    fontSize: 11,
-    color: '#20BF6B',
-    fontWeight: '500',
-  },
-  expandIcon: {
-    marginLeft: 4,
-  },
-  expenseDetails: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(150, 150, 150, 0.1)',
-    paddingTop: 12,
-  },
-  splitHeader: {
-    marginBottom: 12,
-  },
-  splitHeaderText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  splitItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  splitName: {
-    flex: 1,
-    fontSize: 14,
-  },
-  splitAmount: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginRight: 12,
-    color: '#666',
-  },
-  paidBadge: {
-    backgroundColor: 'rgba(32, 191, 107, 0.15)',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  paidText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#20BF6B',
-  },
-  unpaidBadge: {
-    backgroundColor: 'rgba(235, 77, 75, 0.15)',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  unpaidText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#EB4D4B',
-  },
-  expenseActions: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  reminderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#546DE5',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  payButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#20BF6B',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  detailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#546DE5',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 6,
-  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1031,26 +1217,349 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 20,
   },
-  floatingButton: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 120 : 100,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    shadowColor: '#546DE5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 10,
+  splitTypeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  gradientButton: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
+  splitTypeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    marginHorizontal: 6,
+    borderRadius: 20,
+  },
+  splitTypeActive: {
+    backgroundColor: 'rgba(84, 109, 229, 0.1)',
+    borderColor: 'rgba(84, 109, 229, 0.3)',
+  },
+  splitTypeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  groupCardsContainer: {
+    marginBottom: 16,
+  },
+  groupCardsScroll: {
+    paddingLeft: 6,
+    paddingRight: 20,
+    paddingVertical: 8,
+  },
+  groupCard: {
+    width: 120,
+    height: 140,
+    backgroundColor: 'rgba(150, 150, 150, 0.08)',
+    borderRadius: 16,
+    marginLeft: 10,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  groupCardSelected: {
+    borderWidth: 2,
+    backgroundColor: 'rgba(150, 150, 150, 0.12)',
+  },
+  groupIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
+  },
+  groupName: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  groupMembers: {
+    fontSize: 12,
+    color: '#999',
+  },
+  groupSelectedIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#546DE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addGroupCard: {
+    width: 120,
+    height: 140,
+    backgroundColor: 'rgba(84, 109, 229, 0.08)',
+    borderRadius: 16,
+    marginLeft: 10,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(84, 109, 229, 0.3)',
+  },
+  addGroupIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    backgroundColor: 'rgba(84, 109, 229, 0.1)',
+  },
+  addGroupText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#546DE5',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
+  },
+  modalContent: {
+    width: '90%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  groupInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  iconOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
+  },
+  iconOption: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginBottom: 12,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  colorOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 24,
+  },
+  colorOption: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 12,
+    marginBottom: 12,
+  },
+  colorOptionSelected: {
+    borderWidth: 3,
+    borderColor: 'white',
+  },
+  createGroupButton: {
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createGroupButtonDisabled: {
+    opacity: 0.5,
+  },
+  createGroupButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  expenseModalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  expenseForm: {
+    marginVertical: 10,
+    maxHeight: 400,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+  },
+  amountInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currencySymbol: {
+    fontSize: 18,
+    fontWeight: '500',
+    marginRight: 4,
+  },
+  amountInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+  },
+  categoryContainer: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+  },
+  categoryButton: {
+    alignItems: 'center',
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  categoryButtonSelected: {
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  categoryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  categoryName: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  paidByContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  paidByButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(150, 150, 150, 0.3)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  paidByButtonSelected: {
+    backgroundColor: '#546DE5',
+    borderColor: '#546DE5',
+  },
+  paidByButtonText: {
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  splitWithContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  splitWithButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(150, 150, 150, 0.3)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  splitWithButtonSelected: {
+    backgroundColor: '#20BF6B',
+    borderColor: '#20BF6B',
+  },
+  splitWithButtonText: {
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  checkIcon: {
+    marginLeft: 6,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(150, 150, 150, 0.15)',
+    marginRight: 10,
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  addButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#546DE5',
+    marginLeft: 10,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -9,6 +9,7 @@ import HomeIsland, { IslandMode } from '../components/HomeIsland';
 import { useNotification } from '../context/NotificationContext';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import ExpensesScreen from '../screens/main/ExpensesScreen';
+import TasksScheduleScreen from '../screens/main/TasksScheduleScreen';
 
 // Mock data for testing - This would typically come from your data service
 const mockExpenses = [
@@ -115,7 +116,7 @@ const MainTabs: React.FC = () => {
         />
         <Tab.Screen 
           name="Schedule" 
-          component={() => <ScreenPlaceholder title="Schedule Screen" />} 
+          component={TasksScheduleScreen} 
           options={{
             tabBarIcon: ({ color }) => <Ionicons name="calendar" size={22} color={color} />,
           }}
