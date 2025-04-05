@@ -10,6 +10,7 @@ import {
   PanResponder,
   LayoutChangeEvent,
   Image,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -18,6 +19,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
 import { UserProfile } from '../services/api/userService';
 import { HomeDetails } from '../services/api/homeService';
+import { useNotifications } from '../hooks/useNotifications';
 
 const { width } = Dimensions.get('window');
 
@@ -87,19 +89,19 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   const iconRotation = useRef(new Animated.Value(0)).current;
   const slideAnimation = useRef(new Animated.Value(0)).current;
   const pulseAnimation = useRef(new Animated.Value(1)).current;
-  
+
   // Track content height for dynamic sizing
   const [contentHeight, setContentHeight] = useState(0);
-  
+
   // Store previous mode to return to after notification
   const [previousMode, setPreviousMode] = useState<IslandMode>('summary');
-  
+
   // Add onLayout handler to measure content
   const onContentLayout = (event: LayoutChangeEvent) => {
     const { height } = event.nativeEvent.layout;
     setContentHeight(height);
   };
-  
+
   // Handle notification display
   useEffect(() => {
     if (currentNotification) {
@@ -107,7 +109,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       if (mode !== 'notification') {
         setPreviousMode(mode);
       }
-      
+
       // Switch to notification mode and show expanded island
       onModeChange('notification');
       setExpanded(true);
@@ -123,7 +125,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       hideNotification();
     }
   };
-  
+
   // Setup pulse animation for highlight effect
   useEffect(() => {
     const startPulseAnimation = () => {
@@ -140,10 +142,10 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         })
       ]).start(startPulseAnimation);
     };
-    
+
     startPulseAnimation();
   }, []);
-  
+
   // Update data periodically to simulate live updates
   useEffect(() => {
     const dataUpdateInterval = setInterval(() => {
@@ -152,10 +154,10 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         setCurrentDataIndex(prev => (prev + 1) % 3);
       }
     }, 5000);
-    
+
     return () => clearInterval(dataUpdateInterval);
   }, [expanded]);
-  
+
   useEffect(() => {
     // Reset initial state when mode changes (except for notifications)
     if (mode !== 'notification') {
@@ -165,14 +167,14 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         duration: 300,
         useNativeDriver: false
       }).start();
-      
+
       Animated.timing(iconRotation, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true
       }).start();
     }
-    
+
     // Animation for mode change
     Animated.sequence([
       Animated.timing(slideAnimation, {
@@ -187,7 +189,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       })
     ]).start();
   }, [mode]);
-  
+
   // Handle back navigation for profile mode
   const handleBackPress = () => {
     if (contextMode === 'profile' && onBackPress) {
@@ -200,13 +202,13 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
         // Only respond to horizontal gestures when not in notification mode
-        return mode !== 'notification' && 
-               Math.abs(gestureState.dx) > 5 && 
-               Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+        return mode !== 'notification' &&
+          Math.abs(gestureState.dx) > 5 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
       },
       onPanResponderRelease: (_, gestureState) => {
         if (mode === 'notification') return;
-        
+
         if (gestureState.dx < -50) {
           // Swipe left -> next mode
           const nextMode = MODE_CYCLE[mode];
@@ -217,7 +219,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             onBackPress(); // Navigate back on swipe right in profile mode
             return;
           }
-          
+
           const prevMode = Object.entries(MODE_CYCLE).find(([_, next]) => next === mode)?.[0] as IslandMode;
           if (prevMode) {
             onModeChange(prevMode);
@@ -226,40 +228,40 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       }
     })
   ).current;
-  
+
   const toggleExpand = () => {
     // Don't allow collapsing notifications with toggle
     if (mode === 'notification') {
       handleNotificationDismiss();
       return;
     }
-    
+
     const newExpanded = !expanded;
     setExpanded(newExpanded);
-    
+
     Animated.spring(expandAnimation, {
       toValue: newExpanded ? 1 : 0,
       friction: 7,
       tension: 70,
       useNativeDriver: false
     }).start();
-    
+
     Animated.timing(iconRotation, {
       toValue: newExpanded ? 1 : 0,
       duration: 300,
       useNativeDriver: true
     }).start();
   };
-  
+
   // Calculate dynamic expanded height based on content height
   const getDynamicHeight = () => {
     if (contentHeight > 0) {
       // Header height (56) + measured content height + padding/margins (30)
       return 56 + contentHeight + 70; // 70px for bottom buttons and padding
     }
-    
+
     // Default heights if content hasn't been measured yet
-    switch(mode) {
+    switch (mode) {
       case 'notification': return 140; // Smaller height for notifications
       case 'summary': return 220;
       case 'expenses': return 230;
@@ -270,20 +272,20 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       default: return 220;
     }
   };
-  
+
   const expandedHeight = expandAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [56, getDynamicHeight()]
   });
-  
+
   const rotate = iconRotation.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg']
   });
-  
+
   // Get notification icon based on type
   const getNotificationIcon = (type?: NotificationType) => {
-    switch(type) {
+    switch (type) {
       case 'success': return 'checkmark-circle';
       case 'error': return 'alert-circle';
       case 'warning': return 'warning';
@@ -291,10 +293,10 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       default: return 'information-circle';
     }
   };
-  
+
   // Get notification colors
   const getNotificationColors = (type?: NotificationType) => {
-    switch(type) {
+    switch (type) {
       case 'success':
         return isDarkMode
           ? { gradient: ['#0E3B2E', '#114D3C', '#1D6852'], accent: '#2EAF89', text: '#E0F5EF' }
@@ -309,28 +311,28 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           : { gradient: ['#B3841A', '#CC9621', '#E2AB2E'], accent: '#FFD980', text: '#FFFFFF' };
       case 'info':
       default:
-        return isDarkMode 
+        return isDarkMode
           ? { gradient: ['#142949', '#1D3A6E', '#2E4D8E'], accent: '#4A77D1', text: '#E0E6F5' }
           : { gradient: ['#2952A3', '#3A66BD', '#4A77D1'], accent: '#8AADF3', text: '#FFFFFF' };
     }
   };
-  
+
   // Premium color schemes for each mode
   const getPremiumColors = (modeType: IslandMode) => {
     if (modeType === 'notification' && currentNotification) {
       return getNotificationColors(currentNotification.type);
     }
-    
+
     // Special profile-specific colors
     if (contextMode === 'profile') {
-      return isDarkMode 
+      return isDarkMode
         ? { gradient: ['#3E2A63', '#513380', '#6441A5'], accent: '#9F71ED', text: '#F0E6FF' }
         : { gradient: ['#6441A5', '#7B56C2', '#9F71ED'], accent: '#C7AEFF', text: '#FFFFFF' };
     }
-    
-    switch(modeType) {
+
+    switch (modeType) {
       case 'summary':
-        return isDarkMode 
+        return isDarkMode
           ? { gradient: ['#142949', '#1D3A6E', '#2E4D8E'], accent: '#4A77D1', text: '#E0E6F5' }
           : { gradient: ['#2952A3', '#3A66BD', '#4A77D1'], accent: '#8AADF3', text: '#FFFFFF' };
       case 'expenses':
@@ -354,12 +356,12 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           ? { gradient: ['#5C1428', '#7A1935', '#A32247'], accent: '#EB5982', text: '#FDECF2' }
           : { gradient: ['#A32247', '#C7295A', '#EB5982'], accent: '#FFA5C0', text: '#FFFFFF' };
       default:
-        return isDarkMode 
+        return isDarkMode
           ? { gradient: ['#142949', '#1D3A6E', '#2E4D8E'], accent: '#4A77D1', text: '#E0E6F5' }
           : { gradient: ['#2952A3', '#3A66BD', '#4A77D1'], accent: '#8AADF3', text: '#FFFFFF' };
     }
   };
-  
+
   // Get profile-specific content data
   const getProfileData = () => {
     if (!profile || !homeData) {
@@ -368,32 +370,32 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         secondary: 'Profile data not loaded'
       };
     }
-    
+
     const data = [
-      { 
+      {
         primary: homeData.name,
         secondary: `${homeData.city}, ${homeData.state_province}`
       },
-      { 
+      {
         primary: `$${homeData.monthly_rent}`,
         secondary: 'Monthly Rent'
       },
-      { 
+      {
         primary: profile.full_name,
         secondary: profile.phone_number || 'Add phone number'
       }
     ];
-    
+
     return data[currentDataIndex % data.length];
   };
-  
+
   // Mock data for different data points to show cycling information
   const getMockData = (modeType: IslandMode, dataIndex: number) => {
     // If we're in profile context, show profile-specific data
     if (contextMode === 'profile') {
       return getProfileData();
     }
-    
+
     const data: Record<IslandMode, { primary: string; secondary: string }[]> = {
       summary: [
         { primary: '$124.50', secondary: 'You owe' },
@@ -431,15 +433,15 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         { primary: 'Update', secondary: 'Your balance has been updated' },
       ]
     };
-    
+
     // Return appropriate data or fallback to a default
     return data[modeType]?.[dataIndex % 3] || { primary: 'No data', secondary: 'Check back later' };
   };
-  
+
   // Get island data based on mode
   const getIslandContent = () => {
     const colors = getPremiumColors(mode);
-    
+
     // Handle notification mode
     if (mode === 'notification' && currentNotification) {
       return {
@@ -452,7 +454,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         actionText: 'Dismiss'
       };
     }
-    
+
     // If in profile context, show profile-specific content
     if (contextMode === 'profile') {
       return {
@@ -465,11 +467,11 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         actionText: ''
       };
     }
-    
+
     // For standard modes, use mock data
     const currentData = getMockData(mode, currentDataIndex);
-    
-    switch(mode) {
+
+    switch (mode) {
       case 'summary':
         return {
           title: 'Home Summary',
@@ -552,7 +554,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
         };
     }
   };
-  
+
   const handleIslandAction = () => {
     // For expenses mode, we want to explicitly show expense creation UI
     if (mode === 'expenses') {
@@ -565,7 +567,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   };
 
   const getActionButtonText = (currentMode: IslandMode) => {
-    switch(currentMode) {
+    switch (currentMode) {
       case 'expenses':
         return 'Add Expense';
       case 'tasks':
@@ -586,9 +588,9 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   // Render notification content
   const renderNotificationContent = () => {
     if (!currentNotification) return null;
-    
+
     const colors = getPremiumColors('notification');
-    
+
     return (
       <View style={styles.expandedContent} onLayout={onContentLayout}>
         <View style={styles.notificationContent}>
@@ -596,9 +598,9 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             {currentNotification.message}
           </Text>
         </View>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, {backgroundColor: colors.accent}]}
+
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: colors.accent }]}
           onPress={handleNotificationDismiss}
         >
           <Text style={styles.actionButtonText}>Dismiss</Text>
@@ -610,7 +612,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   // Render profile-specific content when in profile context
   const renderProfileContent = () => {
     if (!profile || !homeData) return null;
-    
+
     return (
       <View style={styles.expandedContent} onLayout={onContentLayout}>
         <View style={styles.profileCard}>
@@ -618,16 +620,16 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           <Text style={[styles.homeNameHeader, { color: colors.text }]}>
             {homeData.name}
           </Text>
-          
+
           <View style={styles.profileInfoContainer}>
             <Text style={[styles.profileName, { color: colors.text }]}>
               {profile.full_name}
             </Text>
           </View>
-          
+
           {/* Invitation code section */}
           {homeData.invitation_code && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.inviteCodeContainer}
               onPress={onInvitePress}
             >
@@ -639,76 +641,76 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             </TouchableOpacity>
           )}
         </View>
-        
+
         {/* Theme toggle and logout buttons */}
         <View style={styles.profileActionsRow}>
-          <TouchableOpacity 
-            style={[styles.profileActionButton, {backgroundColor: 'rgba(255,255,255,0.1)'}]}
+          <TouchableOpacity
+            style={[styles.profileActionButton, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
             onPress={onThemeToggle}
           >
             <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={16} color={colors.text} />
-            <Text style={[styles.profileActionText, {color: colors.text}]}>
+            <Text style={[styles.profileActionText, { color: colors.text }]}>
               {isDarkMode ? "Light Mode" : "Dark Mode"}
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.profileActionButton, {backgroundColor: 'rgba(255,255,255,0.1)'}]}
+
+          <TouchableOpacity
+            style={[styles.profileActionButton, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
             onPress={onLogout}
           >
             <Ionicons name="log-out-outline" size={16} color={colors.text} />
-            <Text style={[styles.profileActionText, {color: colors.text}]}>Logout</Text>
+            <Text style={[styles.profileActionText, { color: colors.text }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   };
-  
+
   // Content for the expanded state with onLayout to measure content
   const renderExpandedContent = () => {
     // If we're in notification mode, show notification content
     if (mode === 'notification') {
       return renderNotificationContent();
     }
-    
+
     // If in profile context, show profile-specific content
     if (contextMode === 'profile') {
       return renderProfileContent();
     }
-    
+
     // Otherwise show regular content
-    switch(mode) {
+    switch (mode) {
       case 'summary':
         return (
           <View style={styles.expandedContent} onLayout={onContentLayout}>
             <View style={styles.richDataCard}>
               <View style={styles.dataCardHeader}>
-                <Text style={[styles.dataCardTitle, {color: colors.text}]}>Your Balance</Text>
-                <View style={[styles.dataCardBadge, {backgroundColor: colors.accent}]}>
+                <Text style={[styles.dataCardTitle, { color: colors.text }]}>Your Balance</Text>
+                <View style={[styles.dataCardBadge, { backgroundColor: colors.accent }]}>
                   <Text style={styles.dataCardBadgeText}>Updated</Text>
                 </View>
               </View>
-              
+
               <View style={styles.summaryStats}>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, {color: colors.text}]}>$124.50</Text>
-                  <Text style={[styles.statLabel, {color: `${colors.text}99`}]}>You Owe</Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>$124.50</Text>
+                  <Text style={[styles.statLabel, { color: `${colors.text}99` }]}>You Owe</Text>
                 </View>
-                <View style={[styles.statDivider, {backgroundColor: `${colors.text}33`}]} />
+                <View style={[styles.statDivider, { backgroundColor: `${colors.text}33` }]} />
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, {color: colors.text}]}>$215.75</Text>
-                  <Text style={[styles.statLabel, {color: `${colors.text}99`}]}>You're Owed</Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>$215.75</Text>
+                  <Text style={[styles.statLabel, { color: `${colors.text}99` }]}>You're Owed</Text>
                 </View>
-                <View style={[styles.statDivider, {backgroundColor: `${colors.text}33`}]} />
+                <View style={[styles.statDivider, { backgroundColor: `${colors.text}33` }]} />
                 <View style={styles.statItem}>
-                  <Text style={[styles.statValue, {color: colors.text}]}>+$91.25</Text>
-                  <Text style={[styles.statLabel, {color: `${colors.text}99`}]}>Net</Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>+$91.25</Text>
+                  <Text style={[styles.statLabel, { color: `${colors.text}99` }]}>Net</Text>
                 </View>
               </View>
             </View>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, {backgroundColor: colors.accent}]}
+
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.accent }]}
               onPress={handleIslandAction}
             >
               <Text style={styles.actionButtonText}>{content.actionText}</Text>
@@ -716,36 +718,36 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
             </TouchableOpacity>
           </View>
         );
-        
+
       default:
         return (
           <View style={styles.expandedContent} onLayout={onContentLayout}>
             <View style={styles.richDataCard}>
               <View style={styles.dataCardHeader}>
-                <Text style={[styles.dataCardTitle, {color: colors.text}]}>{content.title}</Text>
+                <Text style={[styles.dataCardTitle, { color: colors.text }]}>{content.title}</Text>
               </View>
               <View style={styles.placeholderContent}>
-                <Text style={[styles.placeholderText, {color: `${colors.text}DD`}]}>
+                <Text style={[styles.placeholderText, { color: `${colors.text}DD` }]}>
                   {content.primaryText}
                 </Text>
-                <Text style={[styles.placeholderSubtext, {color: `${colors.text}99`}]}>
+                <Text style={[styles.placeholderSubtext, { color: `${colors.text}99` }]}>
                   {content.secondaryText}
                 </Text>
               </View>
             </View>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, {backgroundColor: colors.accent}]}
+
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.accent }]}
               onPress={handleIslandAction}
             >
               <Text style={styles.actionButtonText}>
                 {getActionButtonText(mode)}
               </Text>
-              <Ionicons 
-                name={mode === 'expenses' ? 'add-circle-outline' : 'arrow-forward'} 
-                size={16} 
-                color="#fff" 
-                style={styles.actionButtonIcon} 
+              <Ionicons
+                name={mode === 'expenses' ? 'add-circle-outline' : 'arrow-forward'}
+                size={16}
+                color="#fff"
+                style={styles.actionButtonIcon}
               />
             </TouchableOpacity>
           </View>
@@ -757,48 +759,48 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   const renderQuickModeButtons = () => {
     // Don't show mode buttons for notifications
     if (mode === 'notification') return null;
-    
+
     // Show profile-specific buttons when in profile context
-    const modes = contextMode === 'profile' 
+    const modes = contextMode === 'profile'
       ? [
-          {mode: 'summary', icon: 'person', label: 'Profile'},
-          {mode: 'expenses', icon: 'settings-outline', label: 'Settings'},
-          {mode: 'tasks', icon: 'key-outline', label: 'Security'},
-          {mode: 'schedule', icon: 'help-circle-outline', label: 'Help'},
-          {mode: 'alert', icon: 'log-out-outline', label: 'Logout'},
-        ]
+        { mode: 'summary', icon: 'person', label: 'Profile' },
+        { mode: 'expenses', icon: 'settings-outline', label: 'Settings' },
+        { mode: 'tasks', icon: 'key-outline', label: 'Security' },
+        { mode: 'schedule', icon: 'help-circle-outline', label: 'Help' },
+        { mode: 'alert', icon: 'log-out-outline', label: 'Logout' },
+      ]
       : [
-          {mode: 'summary', icon: 'home', label: 'Home'},
-          {mode: 'expenses', icon: 'card', label: 'Expenses'},
-          {mode: 'tasks', icon: 'water', label: 'Tasks'},
-          {mode: 'schedule', icon: 'calendar', label: 'Schedule'},
-          {mode: 'alert', icon: 'alert-circle', label: 'Alerts'},
-          {mode: 'notification', icon: 'notifications', label: 'Notifications'},
-        ];
-    
+        { mode: 'summary', icon: 'home', label: 'Home' },
+        { mode: 'expenses', icon: 'card', label: 'Expenses' },
+        { mode: 'tasks', icon: 'water', label: 'Tasks' },
+        { mode: 'schedule', icon: 'calendar', label: 'Schedule' },
+        { mode: 'alert', icon: 'alert-circle', label: 'Alerts' },
+        { mode: 'notification', icon: 'notifications', label: 'Notifications' },
+      ];
+
     return (
-      <View style={[styles.quickAccessContainer, {borderTopColor: `${colors.text}22`}]}>
+      <View style={[styles.quickAccessContainer, { borderTopColor: `${colors.text}22` }]}>
         {modes.map((item) => {
           const isActive = mode === item.mode;
           return (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={item.mode}
               style={styles.modeButton}
               onPress={() => onModeChange(item.mode)}
             >
               <View style={[
                 styles.modeButtonIconWrapper,
-                isActive && {backgroundColor: colors.accent}
+                isActive && { backgroundColor: colors.accent }
               ]}>
-                <Ionicons 
-                  name={item.icon as any} 
-                  size={16} 
-                  color={isActive ? '#fff' : `${colors.text}99`} 
+                <Ionicons
+                  name={item.icon as any}
+                  size={16}
+                  color={isActive ? '#fff' : `${colors.text}99`}
                 />
               </View>
               <Text style={[
-                styles.modeButtonLabel, 
-                {color: isActive ? colors.text : `${colors.text}99`}
+                styles.modeButtonLabel,
+                { color: isActive ? colors.text : `${colors.text}99` }
               ]}>
                 {item.label}
               </Text>
@@ -811,7 +813,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
 
   const content = getIslandContent();
   const colors = getPremiumColors(mode);
-  
+
   // Dynamic shadow based on mode
   const getShadowStyle = () => {
     return {
@@ -822,11 +824,11 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       elevation: expanded ? 12 : 8,
     };
   };
-  
+
   return (
-    <Animated.View 
+    <Animated.View
       style={[
-        styles.container, 
+        styles.container,
         { height: expandedHeight },
         getShadowStyle(),
         contextMode === 'profile' && styles.profileModeContainer
@@ -835,8 +837,8 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
     >
       <LinearGradient
         colors={colors.gradient}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 1}}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
         <BlurView intensity={expanded ? 20 : 0} tint="dark" style={styles.blurView}>
@@ -858,12 +860,12 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
                   <TouchableOpacity
                     style={styles.backButton}
                     onPress={handleBackPress}
-                    hitSlop={{top: 15, right: 15, bottom: 15, left: 15}}
+                    hitSlop={{ top: 15, right: 15, bottom: 15, left: 15 }}
                   >
                     <Ionicons name="chevron-back" size={22} color={colors.text} />
                   </TouchableOpacity>
                 )}
-                
+
                 <Animated.View
                   style={[
                     styles.iconContainer,
@@ -876,7 +878,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
                   <Text style={styles.titleText} numberOfLines={1}>{content.title}</Text>
                   {contextMode !== 'profile' && content.primaryText && (
                     <View style={styles.statusRow}>
-                      <View style={[styles.statusDot, {backgroundColor: colors.accent}]} />
+                      <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
                       <Text style={styles.statusText} numberOfLines={1}>
                         {content.primaryText}
                       </Text>
@@ -884,17 +886,17 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
                   )}
                 </View>
               </View>
-              
-              <Animated.View style={{transform: [{ rotate }]}}>
-                <Ionicons 
-                  name={expanded ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color={colors.text} 
+
+              <Animated.View style={{ transform: [{ rotate }] }}>
+                <Ionicons
+                  name={expanded ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color={colors.text}
                 />
               </Animated.View>
             </TouchableOpacity>
           </Animated.View>
-          
+
           {/* Expanded Content with Animation */}
           {expanded && (
             <>
@@ -1212,6 +1214,111 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center'
   },
+  notificationButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#EB4D4B',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  notificationsPanel: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    right: 20,
+    maxHeight: 400,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 100,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  notificationHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  markAllReadText: {
+    color: '#546DE5',
+    fontSize: 14,
+  },
+  notificationsList: {
+    maxHeight: 340,
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.1)',
+    borderLeftWidth: 4,
+  },
+  notificationIcon: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationTitle: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  notificationMessage: {
+    fontSize: 13,
+    color: '#777',
+    marginBottom: 5,
+  },
+  notificationTime: {
+    fontSize: 11,
+    color: '#999',
+  },
+  unreadIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#546DE5',
+    alignSelf: 'center',
+    marginLeft: 8,
+  },
+  emptyNotifications: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyNotificationsText: {
+    marginTop: 12,
+    fontSize: 14,
+  }
 });
 
 export default HomeIsland;

@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import * as houseRulesService from '../services/api/houseRulesService';
 import { fetchUserHomeMembership } from '../services/api/homeService';
 import { HouseRule } from '../services/api/houseRulesService';
+import { supabase } from '../config/supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 export const useHouseRules = (initialHomeId?: string) => {
   const { user } = useAuth();
@@ -13,6 +15,11 @@ export const useHouseRules = (initialHomeId?: string) => {
   const [rules, setRules] = useState<HouseRule[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // References to realtime subscriptions
+  const rulesSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const agreementsSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const commentsSubscriptionRef = useRef<RealtimeChannel | null>(null);
   
   // Update homeId if initialHomeId changes
   useEffect(() => {
@@ -39,7 +46,6 @@ export const useHouseRules = (initialHomeId?: string) => {
   
   // Fetch all rules for a home
   const fetchRules = useCallback(async (targetHomeId?: string) => {
-    // Use provided targetHomeId, or fall back to state homeId
     const homeIdToUse = targetHomeId || homeId;
     
     if (!homeIdToUse) {
@@ -52,7 +58,6 @@ export const useHouseRules = (initialHomeId?: string) => {
       }
     }
     
-    // At this point we should have a valid homeId either from props, params, or user default
     const effectiveHomeId = targetHomeId || homeId || await fetchUserDefaultHome();
     
     if (!effectiveHomeId) {
@@ -75,6 +80,192 @@ export const useHouseRules = (initialHomeId?: string) => {
       setLoading(false);
     }
   }, [homeId, fetchUserDefaultHome]);
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!homeId || !user?.id) {
+      return;
+    }
+
+    // Clean up any existing subscriptions
+    if (rulesSubscriptionRef.current) {
+      rulesSubscriptionRef.current.unsubscribe();
+      rulesSubscriptionRef.current = null;
+    }
+    
+    if (agreementsSubscriptionRef.current) {
+      agreementsSubscriptionRef.current.unsubscribe();
+      agreementsSubscriptionRef.current = null;
+    }
+    
+    if (commentsSubscriptionRef.current) {
+      commentsSubscriptionRef.current.unsubscribe();
+      commentsSubscriptionRef.current = null;
+    }
+    
+    // Create subscription for house_rules table
+    const rulesSubscription = supabase
+      .channel('house-rules-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'house_rules',
+          filter: `home_id=eq.${homeId}`
+        },
+        async (payload) => {
+          console.log('Real-time rules update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            const newRule = payload.new as HouseRule;
+            const completeRule = await houseRulesService.fetchHouseRule(newRule.id);
+            if (completeRule) {
+              setRules(prev => [completeRule, ...prev]);
+            }
+          } 
+          else if (payload.eventType === 'UPDATE') {
+            const updatedRule = payload.new as HouseRule;
+            
+            if (updatedRule.is_active) {
+              const completeRule = await houseRulesService.fetchHouseRule(updatedRule.id);
+              if (completeRule) {
+                setRules(prev => prev.map(r => r.id === completeRule.id ? completeRule : r));
+              }
+            } else {
+              setRules(prev => prev.filter(r => r.id !== updatedRule.id));
+            }
+          }
+        }
+      )
+      .subscribe();
+    
+    // Create subscription for rule_agreements table
+    const agreementsSubscription = supabase
+      .channel('rule-agreements-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rule_agreements'
+        },
+        async (payload) => {
+          console.log('Real-time agreements update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            const newAgreement = payload.new;
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('user_id, full_name')
+              .eq('user_id', newAgreement.user_id)
+              .single();
+            
+            setRules(prev => prev.map(rule => {
+              if (rule.id === newAgreement.rule_id) {
+                const userName = userProfile?.full_name || 
+                  (newAgreement.user_id === user.id ? 'You' : 'Unknown');
+                
+                return {
+                  ...rule,
+                  agreements: [
+                    ...(rule.agreements || []),
+                    {
+                      ...newAgreement,
+                      user_name: userName
+                    }
+                  ]
+                };
+              }
+              return rule;
+            }));
+          } 
+          else if (payload.eventType === 'DELETE') {
+            const deletedAgreement = payload.old;
+            
+            setRules(prev => prev.map(rule => {
+              if (rule.id === deletedAgreement.rule_id) {
+                return {
+                  ...rule,
+                  agreements: (rule.agreements || []).filter(a => 
+                    a.user_id !== deletedAgreement.user_id
+                  )
+                };
+              }
+              return rule;
+            }));
+          }
+        }
+      )
+      .subscribe();
+      
+    // Create subscription for rule_comments table  
+    const commentsSubscription = supabase
+      .channel('rule-comments-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rule_comments'
+        },
+        async (payload) => {
+          console.log('Real-time comments update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            const newComment = payload.new;
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('user_id, full_name')
+              .eq('user_id', newComment.user_id)
+              .single();
+            
+            setRules(prev => prev.map(rule => {
+              if (rule.id === newComment.rule_id) {
+                const userName = userProfile?.full_name || 
+                  (newComment.user_id === user.id ? 'You' : 'Unknown');
+                
+                return {
+                  ...rule,
+                  comments: [
+                    ...(rule.comments || []),
+                    {
+                      ...newComment,
+                      user_name: userName
+                    }
+                  ]
+                };
+              }
+              return rule;
+            }));
+          }
+        }
+      )
+      .subscribe();
+    
+    // Store subscription references
+    rulesSubscriptionRef.current = rulesSubscription;
+    agreementsSubscriptionRef.current = agreementsSubscription;
+    commentsSubscriptionRef.current = commentsSubscription;
+    
+    // Clean up on unmount or when homeId changes
+    return () => {
+      if (rulesSubscriptionRef.current) {
+        rulesSubscriptionRef.current.unsubscribe();
+        rulesSubscriptionRef.current = null;
+      }
+      
+      if (agreementsSubscriptionRef.current) {
+        agreementsSubscriptionRef.current.unsubscribe();
+        agreementsSubscriptionRef.current = null;
+      }
+      
+      if (commentsSubscriptionRef.current) {
+        commentsSubscriptionRef.current.unsubscribe();
+        commentsSubscriptionRef.current = null;
+      }
+    };
+  }, [homeId, user]);
   
   // Create a new rule
   const createRule = useCallback(async (
@@ -89,7 +280,6 @@ export const useHouseRules = (initialHomeId?: string) => {
       return null;
     }
     
-    // Use overrideHomeId, or homeId from state, or try to fetch user's default home
     let targetHomeId = overrideHomeId || homeId;
     
     if (!targetHomeId) {
@@ -108,7 +298,6 @@ export const useHouseRules = (initialHomeId?: string) => {
       );
       
       if (newRule) {
-        // Add the new rule to state with initial data
         const enhancedRule = {
           ...newRule,
           creator_name: user.user_metadata?.full_name || 'You',
@@ -143,17 +332,14 @@ export const useHouseRules = (initialHomeId?: string) => {
       if (success) {
         setRules(prev => prev.map(rule => {
           if (rule.id === ruleId) {
-            // Check if user has already agreed
             const userAgreement = rule.agreements?.find(a => a.user_id === user.id);
             
             if (userAgreement) {
-              // Remove agreement
               return {
                 ...rule,
                 agreements: rule.agreements?.filter(a => a.user_id !== user.id) || []
               };
             } else {
-              // Add agreement
               return {
                 ...rule,
                 agreements: [
@@ -237,11 +423,6 @@ export const useHouseRules = (initialHomeId?: string) => {
     }
   }, [showNotification]);
   
-  // Manual refresh function for UI controls
-  const refreshRules = useCallback(async () => {
-    return fetchRules();
-  }, [fetchRules]);
-  
   // Load rules on mount and when homeId changes
   useEffect(() => {
     if (homeId) {
@@ -264,7 +445,7 @@ export const useHouseRules = (initialHomeId?: string) => {
     homeId: homeId,
     setHomeId,
     fetchRules,
-    refreshRules,
+    refreshRules: fetchRules, // Alias for consistency
     createRule,
     toggleAgreement,
     addComment,

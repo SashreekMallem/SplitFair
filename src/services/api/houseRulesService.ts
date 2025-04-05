@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import { createHomeNotification, createUserNotification } from './notificationService';
 
 export type HouseRule = {
   id: string;
@@ -333,6 +334,25 @@ export const createHouseRule = async (
       return null;
     }
     
+    // Get user's name for notification
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('full_name')
+      .eq('user_id', userId)
+      .single();
+      
+    const userName = userProfile?.full_name || 'A user';
+    
+    // Create a notification for all home members about the new rule
+    await createHomeNotification(
+      homeId,
+      'New House Rule Added',
+      `${userName} created a new house rule: ${rule.title}`,
+      'info',
+      'house_rules',
+      data.id
+    );
+    
     // Automatically add the creator as an agreement
     await supabase
       .from('rule_agreements')
@@ -382,6 +402,17 @@ export const updateHouseRule = async (
  */
 export const deleteHouseRule = async (ruleId: string): Promise<boolean> => {
   try {
+    // Get rule details before deleting
+    const { data: rule } = await supabase
+      .from('house_rules')
+      .select('title, home_id, created_by')
+      .eq('id', ruleId)
+      .single();
+      
+    if (!rule) {
+      return false;
+    }
+    
     const { error } = await supabase
       .from('house_rules')
       .update({
@@ -389,6 +420,26 @@ export const deleteHouseRule = async (ruleId: string): Promise<boolean> => {
         updated_at: new Date(),
       })
       .eq('id', ruleId);
+    
+    if (!error) {
+      // Get user name
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('full_name')
+        .eq('user_id', rule.created_by)
+        .single();
+        
+      const userName = userProfile?.full_name || 'A user';
+      
+      // Create a notification for all home members about the deleted rule
+      await createHomeNotification(
+        rule.home_id,
+        'House Rule Removed',
+        `${userName}'s rule "${rule.title}" has been removed`,
+        'info',
+        'house_rules'
+      );
+    }
     
     return !error;
     
@@ -414,6 +465,26 @@ export const toggleRuleAgreement = async (ruleId: string, userId: string): Promi
       return false;
     }
     
+    // Get rule details for notification
+    const { data: rule } = await supabase
+      .from('house_rules')
+      .select('title, home_id, created_by')
+      .eq('id', ruleId)
+      .single();
+      
+    if (!rule) {
+      return false;
+    }
+    
+    // Get user name
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('full_name')
+      .eq('user_id', userId)
+      .single();
+      
+    const userName = userProfile?.full_name || 'A user';
+    
     if (existingAgreement) {
       // Remove the agreement
       const { error: deleteError } = await supabase
@@ -421,6 +492,19 @@ export const toggleRuleAgreement = async (ruleId: string, userId: string): Promi
         .delete()
         .eq('rule_id', ruleId)
         .eq('user_id', userId);
+      
+      // Create a notification for rule creator if they're not the one withdrawing
+      if (rule.created_by !== userId) {
+        await createUserNotification(
+          rule.created_by,
+          rule.home_id,
+          'Agreement Withdrawn',
+          `${userName} no longer agrees with your rule: ${rule.title}`,
+          'info',
+          'house_rules',
+          ruleId
+        );
+      }
       
       return !deleteError;
     } else {
@@ -431,6 +515,19 @@ export const toggleRuleAgreement = async (ruleId: string, userId: string): Promi
           rule_id: ruleId,
           user_id: userId,
         });
+      
+      // Create a notification for rule creator if they're not the one agreeing
+      if (rule.created_by !== userId) {
+        await createUserNotification(
+          rule.created_by,
+          rule.home_id,
+          'New Agreement',
+          `${userName} agreed with your rule: ${rule.title}`,
+          'success',
+          'house_rules',
+          ruleId
+        );
+      }
       
       return !insertError;
     }
@@ -462,6 +559,49 @@ export const addRuleComment = async (
     if (error) {
       return null;
     }
+    
+    // Get rule details
+    const { data: rule } = await supabase
+      .from('house_rules')
+      .select('title, home_id, created_by')
+      .eq('id', ruleId)
+      .single();
+      
+    if (!rule) {
+      return data as RuleComment;
+    }
+    
+    // Get user name
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('full_name')
+      .eq('user_id', userId)
+      .single();
+      
+    const userName = userProfile?.full_name || 'A user';
+    
+    // Create a notification for rule creator if they're not the commenter
+    if (rule.created_by !== userId) {
+      await createUserNotification(
+        rule.created_by,
+        rule.home_id,
+        'New Comment',
+        `${userName} commented on your rule: ${rule.title}`,
+        'info',
+        'house_rules',
+        ruleId
+      );
+    }
+    
+    // Create a notification for all home members about the new comment
+    await createHomeNotification(
+      rule.home_id,
+      'New House Rule Comment',
+      `${userName} commented on the rule: ${rule.title}`,
+      'info',
+      'house_rules',
+      ruleId
+    );
     
     return data as RuleComment;
     
