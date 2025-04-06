@@ -13,6 +13,7 @@ import {
   Modal,
   Switch,
   Alert,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,186 +25,10 @@ import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 import useHouseRules from '../../hooks/useHouseRules';
 import useHomeMembers from '../../hooks/useHomeMembers';
+import { HouseRule } from '../../services/api/houseRulesService';
+import { createStableKey } from '../../utils/keyHelper';
+import useTasks from '../../hooks/useTasks';
 import UserAvatar from '../../components/common/UserAvatar';
-import { HouseRule, RuleComment } from '../../services/api/houseRulesService';
-import { fetchUserHomeMembership } from '../../services/api/homeService';
-import { createUniqueKey, createStableKey } from '../../utils/keyHelper';
-
-const { width } = Dimensions.get('window');
-
-// Mock data for tasks
-const MOCK_TASKS = [
-  {
-    id: '1',
-    title: 'Kitchen Cleaning',
-    description: 'Clean countertops, sink, and appliances',
-    assignedTo: 'You',
-    dueDate: '2023-11-18',
-    status: 'pending',
-    category: 'cleaning',
-    rotationEnabled: true,
-    difficulty: 'medium',
-    estimatedTime: 30, // minutes
-    icon: 'restaurant-outline',
-    repeatFrequency: 'weekly',
-    rotationMembers: ['You', 'Alex', 'Jordan'],
-    completionHistory: [
-      { date: '2023-11-11', status: 'completed', completedBy: 'Jordan', rating: 'good' },
-      { date: '2023-11-04', status: 'completed', completedBy: 'Alex', rating: 'poor' },
-    ]
-  },
-  {
-    id: '2',
-    title: 'Bathroom Cleaning',
-    description: 'Clean shower, toilet, and sink',
-    assignedTo: 'Alex',
-    dueDate: '2023-11-17',
-    status: 'completed',
-    category: 'cleaning',
-    rotationEnabled: true,
-    difficulty: 'hard',
-    estimatedTime: 45, // minutes
-    icon: 'water-outline',
-    repeatFrequency: 'weekly',
-    rotationMembers: ['You', 'Alex', 'Jordan'],
-    completionHistory: [
-      { date: '2023-11-10', status: 'completed', completedBy: 'Alex', rating: 'excellent' },
-      { date: '2023-11-03', status: 'missed', assignedTo: 'You', rating: null },
-    ]
-  },
-  {
-    id: '3',
-    title: 'Living Room',
-    description: 'Vacuum floor and dust surfaces',
-    assignedTo: 'Jordan',
-    dueDate: '2023-11-20',
-    status: 'pending',
-    category: 'cleaning',
-    rotationEnabled: true,
-    difficulty: 'medium',
-    estimatedTime: 25, // minutes
-    icon: 'home-outline',
-    repeatFrequency: 'weekly',
-    rotationMembers: ['You', 'Alex', 'Jordan'],
-    completionHistory: [
-      { date: '2023-11-13', status: 'completed', completedBy: 'Jordan', rating: 'good' },
-    ]
-  },
-  {
-    id: '4',
-    title: 'Cooking Dinner',
-    description: 'Prepare dinner for everyone',
-    assignedTo: 'You',
-    dueDate: '2023-11-18',
-    status: 'pending',
-    category: 'cooking',
-    rotationEnabled: true,
-    difficulty: 'hard',
-    estimatedTime: 60, // minutes
-    icon: 'fast-food-outline',
-    repeatFrequency: 'daily',
-    rotationMembers: ['You', 'Alex'], // Jordan doesn't cook
-    completionHistory: [
-      { date: '2023-11-17', status: 'completed', completedBy: 'Alex', rating: 'good' },
-      { date: '2023-11-16', status: 'completed', completedBy: 'You', rating: 'excellent' },
-    ]
-  },
-  {
-    id: '5',
-    title: 'Take Out Trash',
-    description: 'Empty all trash bins and take to dumpster',
-    assignedTo: 'Alex',
-    dueDate: '2023-11-18',
-    status: 'pending',
-    category: 'cleaning',
-    rotationEnabled: true,
-    difficulty: 'easy',
-    estimatedTime: 10, // minutes
-    icon: 'trash-outline',
-    repeatFrequency: 'twice-weekly',
-    rotationMembers: ['You', 'Alex', 'Jordan'],
-    completionHistory: []
-  },
-];
-
-// Mock data for schedule events
-const MOCK_EVENTS = [
-  {
-    id: '1',
-    title: 'House Meeting',
-    description: 'Monthly house meeting to discuss issues and plans',
-    date: '2023-11-22',
-    time: '19:00',
-    endTime: '20:00',
-    createdBy: 'You',
-    attendees: ['You', 'Alex', 'Jordan'],
-    recurring: true,
-    recurrencePattern: 'monthly',
-    location: 'Living Room'
-  },
-  {
-    id: '2',
-    title: 'Rent Due',
-    description: 'Monthly rent payment',
-    date: '2023-11-30',
-    time: '00:00',
-    endTime: '23:59',
-    createdBy: 'System',
-    attendees: ['You', 'Alex', 'Jordan'],
-    recurring: true,
-    recurrencePattern: 'monthly',
-    location: null,
-    isAllDay: true,
-    category: 'payment'
-  },
-  {
-    id: '3',
-    title: 'Plumber Visit',
-    description: 'Fixing the kitchen sink',
-    date: '2023-11-19',
-    time: '10:00',
-    endTime: '12:00',
-    createdBy: 'Alex',
-    attendees: ['Alex'],
-    recurring: false,
-    location: 'Kitchen'
-  }
-];
-
-// Mock data for swap requests
-const MOCK_SWAP_REQUESTS = [
-  {
-    id: '1',
-    taskId: '1',
-    requestedBy: 'Alex',
-    requestedTo: 'You',
-    taskTitle: 'Kitchen Cleaning',
-    originalDate: '2023-11-18',
-    proposedDate: '2023-11-19',
-    message: "I have an appointment on Saturday, could we swap?",
-    status: 'pending',
-    createdAt: '2023-11-16T14:30:00Z'
-  },
-  {
-    id: '2',
-    taskId: '3',
-    requestedBy: 'You',
-    requestedTo: 'Jordan',
-    taskTitle: 'Living Room',
-    originalDate: '2023-11-15',
-    proposedDate: '2023-11-17',
-    message: "Can we swap? I'll be out of town.",
-    status: 'accepted',
-    createdAt: '2023-11-14T09:15:00Z'
-  }
-];
-
-// Mock data for user penalty points
-const MOCK_PENALTY_POINTS = {
-  'You': 0,
-  'Alex': 2,
-  'Jordan': 1
-};
 
 const RULE_CATEGORIES = [
   { id: 'Noise', color: '#9F71ED', icon: 'volume-high-outline' },
@@ -214,21 +39,57 @@ const RULE_CATEGORIES = [
   { id: 'Other', color: '#26C6DA', icon: 'ellipsis-horizontal-outline' },
 ];
 
-const TasksScheduleScreen: React.FC = () => {
+const CHORE_CATEGORIES = [
+  { id: 'cleaning', name: 'Cleaning', icon: 'sparkles-outline', color: '#2EAF89' },
+  { id: 'cooking', name: 'Cooking', icon: 'restaurant-outline', color: '#FF9855' },
+  { id: 'dishes', name: 'Dishes', icon: 'water-outline', color: '#26C6DA' },
+  { id: 'shopping', name: 'Shopping', icon: 'cart-outline', color: '#546DE5' },
+  { id: 'laundry', name: 'Laundry', icon: 'shirt-outline', color: '#9B59B6' },
+  { id: 'trash', name: 'Trash', icon: 'trash-outline', color: '#EB5982' },
+  { id: 'pets', name: 'Pets', icon: 'paw-outline', color: '#F7B731' },
+  { id: 'maintenance', name: 'Maintenance', icon: 'hammer-outline', color: '#8E44AD' },
+  { id: 'other', name: 'Other', icon: 'ellipsis-horizontal-outline', color: '#7F8C8D' },
+];
+
+const EVALUATION_OPTIONS = [
+  { value: 'completed', label: 'Completed Well', icon: 'checkmark-circle', color: '#2EAF89' },
+  { value: 'acceptable', label: 'Acceptable', icon: 'thumbs-up', color: '#546DE5' },
+  { value: 'poor', label: 'Poorly Done', icon: 'alert-circle', color: '#F7B731', penalty: 1 },
+  { value: 'incomplete', label: 'Left Incomplete', icon: 'remove-circle', color: '#FF9855', penalty: 2 },
+  { value: 'not_done', label: 'Not Done At All', icon: 'close-circle', color: '#EB4D4B', penalty: 3 },
+];
+
+const getDaysOfWeek = () => {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const days = [];
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - dayOfWeek);
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+    days.push({
+      name: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i],
+      date: date,
+      dateStr: date.toISOString().split('T')[0],
+      isToday: date.toDateString() === today.toDateString(),
+    });
+  }
+
+  return days;
+};
+
+const TasksScreen: React.FC = () => {
   const { theme, isDarkMode } = useTheme();
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const navigation = useNavigation();
 
-  // State variables
   const [islandMode, setIslandMode] = useState<IslandMode>('tasks');
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'tasks' | 'rules'>('tasks');
-  const [tasks, setTasks] = useState(MOCK_TASKS);
-  const [events, setEvents] = useState(MOCK_EVENTS);
-  const [swapRequests, setSwapRequests] = useState(MOCK_SWAP_REQUESTS);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [taskFilter, setTaskFilter] = useState('mine'); // 'mine', 'all', 'upcoming'
+  const [taskFilter, setTaskFilter] = useState<'mine' | 'all' | 'upcoming'>('mine');
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
   const [newComment, setNewComment] = useState<string>('');
   const [ruleFilter, setRuleFilter] = useState<string | null>(null);
@@ -237,53 +98,86 @@ const TasksScheduleScreen: React.FC = () => {
   const [editedRule, setEditedRule] = useState({
     title: '',
     description: '',
-    category: 'Other'
+    category: 'Other',
   });
 
-  // Get user's home ID
+  const [selectedDay, setSelectedDay] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [daysOfWeek, setDaysOfWeek] = useState(getDaysOfWeek());
+
   const homeId = user?.user_metadata?.home_id || '';
-  
-  // Use house rules hook instead of mock data
-  const { 
-    rules: houseRules, 
-    loading: rulesLoading, 
-    error: rulesError,
+
+  useEffect(() => {
+    // Intentionally empty after removing debug code
+  }, [homeId, user]);
+
+  const {
+    rules: houseRules,
+    loading: rulesLoading,
     fetchRules: refreshRules,
     createRule,
     updateRule,
     toggleAgreement,
     addComment,
-    deleteRule
+    deleteRule,
   } = useHouseRules(homeId);
-  
-  // Use home members hook
-  const { members, formatMemberName } = useHomeMembers(homeId);
-  
-  // New state for task and rule creation modals
+
+  const { members, loading: membersLoading, error: membersError } = useHomeMembers(homeId);
+
+  useEffect(() => {
+    // Intentionally empty after removing debug code
+  }, [members, membersError]);
+
+  const {
+    tasks,
+    loading: tasksLoading,
+    swapRequests,
+    fetchTasks: refreshTasks,
+    createTask,
+    completeTask,
+    requestSwap,
+    respondToSwap,
+  } = useTasks(homeId);
+
   const [showNewTaskModal, setShowNewTaskModal] = useState<boolean>(false);
   const [showNewRuleModal, setShowNewRuleModal] = useState<boolean>(false);
+  const [showEvaluateTaskModal, setShowEvaluateTaskModal] = useState<boolean>(false);
+  const [taskToEvaluate, setTaskToEvaluate] = useState<any | null>(null);
+  const [evaluationRating, setEvaluationRating] = useState<string>('acceptable');
+  const [evaluationNotes, setEvaluationNotes] = useState<string>('');
+  const [evaluationPhoto, setEvaluationPhoto] = useState<string | null>(null);
+
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
     dueDate: new Date().toISOString().split('T')[0],
     category: 'cleaning',
-    assignedTo: 'You',
-    icon: 'checkmark-circle-outline',
+    assignedTo: user?.id || '',
+    icon: 'sparkles-outline',
     rotationEnabled: false,
-    rotationMembers: ['You', 'Alex', 'Jordan']
+    rotationMembers: [user?.id || ''],
+    rotationFrequency: 'weekly',
+    consequence: 'none',
   });
+
   const [newRule, setNewRule] = useState({
     title: '',
     description: '',
-    category: 'Other'
+    category: 'Other',
   });
 
-  // Animation refs
+  const [showSwapRequestModal, setShowSwapRequestModal] = useState<boolean>(false);
+  const [taskToSwap, setTaskToSwap] = useState<any | null>(null);
+  const [swapRequest, setSwapRequest] = useState({
+    requestedTo: '',
+    originalDate: '',
+    proposedDate: new Date().toISOString().split('T')[0],
+    message: '',
+  });
+
   const scrollY = useRef(new Animated.Value(0)).current;
   const headerAnimation = useRef(new Animated.Value(0)).current;
   const contentAnimation = useRef(new Animated.Value(0)).current;
 
-  // Animate on mount
   useEffect(() => {
     Animated.sequence([
       Animated.timing(headerAnimation, {
@@ -299,173 +193,138 @@ const TasksScheduleScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  // Refresh data
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refreshRules();
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    showNotification('Updated', 'Your tasks and schedule have been refreshed', 'success');
-    setRefreshing(false);
+  const calculatePenaltyPoints = () => {
+    if (!user || !tasks) return 0;
+
+    let penaltyPoints = 0;
+    tasks.forEach((task) => {
+      if (task.completion_history) {
+        penaltyPoints += task.completion_history.filter(
+          (h) => h.status === 'missed' && task.assigned_to === user.id
+        ).length;
+      }
+    });
+
+    return penaltyPoints;
   };
 
-  // Handle action button from HomeIsland
-  const handleIslandAction = () => {
-    if (islandMode === 'tasks') {
-      setShowNewTaskModal(true);
-    } else {
-      showNotification('Schedule', 'Adding a new event to the schedule...', 'info');
+  const onRefresh = async () => {
+    setRefreshing(true);
+
+    try {
+      await Promise.all([refreshRules(), refreshTasks()]);
+      showNotification('Updated', 'Your tasks and rules have been refreshed', 'success');
+    } catch (error) {
+      showNotification('Error', 'Failed to refresh some data', 'error');
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  // Handle creating a new task
-  const handleCreateTask = () => {
+  const handleIslandAction = () => {
+    if (islandMode === 'tasks') {
+      setShowNewTaskModal(true);
+    }
+  };
+
+  const handleCreateTask = async () => {
     if (!newTask.title) {
       showNotification('Error', 'Please provide a task title', 'error');
       return;
     }
 
-    const newTaskObj = {
-      id: `task_${Date.now()}`,
+    const categoryInfo = CHORE_CATEGORIES.find((cat) => cat.id === newTask.category);
+    const icon = categoryInfo ? categoryInfo.icon : 'checkmark-circle-outline';
+
+    const taskData = {
       title: newTask.title,
-      description: newTask.description || 'No description provided',
-      assignedTo: newTask.assignedTo,
-      dueDate: newTask.dueDate,
-      status: 'pending',
+      description: newTask.description,
+      due_date: newTask.dueDate,
       category: newTask.category,
-      rotationEnabled: newTask.rotationEnabled,
-      icon: newTask.icon,
-      repeatFrequency: 'weekly',
-      difficulty: 'medium',
-      estimatedTime: 30,
-      rotationMembers: newTask.rotationMembers,
-      completionHistory: []
+      assigned_to: newTask.assignedTo,
+      icon: icon,
+      rotation_enabled: newTask.rotationEnabled,
+      rotation_members: newTask.rotationMembers,
+      repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
+      consequence: newTask.consequence,
     };
 
-    setTasks([newTaskObj, ...tasks]);
-    setShowNewTaskModal(false);
-    setNewTask({
-      title: '',
-      description: '',
-      dueDate: new Date().toISOString().split('T')[0],
-      category: 'cleaning',
-      assignedTo: 'You',
-      icon: 'checkmark-circle-outline',
-      rotationEnabled: false,
-      rotationMembers: ['You', 'Alex', 'Jordan']
-    });
-    showNotification('Success', 'New task has been created', 'success');
-  };
-
-  // Handle creating a new house rule - updated to use createRule from hook
-  const handleCreateRule = async () => {
-    if (!newRule.title || !newRule.description) {
-      showNotification('Error', 'Please fill in all required fields', 'error');
-      return;
-    }
-    
-    let targetHomeId = homeId;
-    
-    if (!targetHomeId && user?.id) {
-      try {
-        const membership = await fetchUserHomeMembership(user.id);
-        if (membership && membership.home_id) {
-          targetHomeId = membership.home_id;
-        } else {
-          showNotification('Error', 'You need to be a member of a home to create rules', 'error');
-          return;
-        }
-      } catch (error) {
-        showNotification('Error', 'Failed to verify home membership', 'error');
-        return;
-      }
-    }
-    
-    if (!targetHomeId) {
-      showNotification('Error', 'Home ID is missing. Cannot create rule.', 'error');
-      return;
-    }
-    
     try {
-      const result = await createRule(
-        {
-          title: newRule.title,
-          description: newRule.description,
-          category: newRule.category
-        },
-        targetHomeId
-      );
-      
+      const result = await createTask(taskData);
       if (result) {
-        setShowNewRuleModal(false);
-        setNewRule({
+        setShowNewTaskModal(false);
+        setNewTask({
           title: '',
           description: '',
-          category: 'Other'
+          dueDate: new Date().toISOString().split('T')[0],
+          category: 'cleaning',
+          assignedTo: user?.id || '',
+          icon: 'sparkles-outline',
+          rotationEnabled: false,
+          rotationMembers: [user?.id || ''],
+          rotationFrequency: 'weekly',
+          consequence: 'none',
         });
       }
-    } catch (error: any) {
-      showNotification('Error', `Failed to create rule: ${error.message}`, 'error');
+    } catch (error) {
+      showNotification('Error', 'Failed to create task', 'error');
     }
   };
 
-  // Handle agreement toggle for rules - updated to use toggleAgreement from hook
   const handleRuleAgreement = async (ruleId: string) => {
     try {
       await toggleAgreement(ruleId);
-    } catch (error: any) {
-      showNotification('Error', `Failed to update agreement: ${error.message}`, 'error');
+    } catch (error) {
+      showNotification('Error', 'Failed to update agreement', 'error');
     }
   };
 
-  // Handle adding comment to a rule - updated to use addComment from hook
   const handleAddComment = async (ruleId: string) => {
     if (!newComment.trim()) return;
-    
+
     try {
       await addComment(ruleId, newComment.trim());
       setNewComment('');
-    } catch (error: any) {
-      showNotification('Error', `Failed to add comment: ${error.message}`, 'error');
+    } catch (error) {
+      showNotification('Error', 'Failed to add comment', 'error');
     }
   };
 
-  // Handle editing a rule - updated to use updateRule from hook
   const handleEditRule = async () => {
     if (!ruleToEdit || !ruleToEdit.id || !editedRule) {
       showNotification('Error', 'Invalid rule data', 'error');
       return;
     }
-    
+
     try {
       const result = await updateRule(ruleToEdit.id, {
         title: editedRule.title,
         description: editedRule.description,
-        category: editedRule.category
+        category: editedRule.category,
       });
-      
+
       if (result) {
         setShowEditRuleModal(false);
         setRuleToEdit(null);
         showNotification('Success', 'Rule updated successfully', 'success');
       }
-    } catch (error: any) {
-      showNotification('Error', `Failed to update rule: ${error.message}`, 'error');
+    } catch (error) {
+      showNotification('Error', 'Failed to update rule', 'error');
     }
   };
 
-  // Handle initiating rule deletion with confirmation
   const handleDeleteRule = (ruleId: string) => {
     Alert.alert(
-      "Delete Rule",
-      "Are you sure you want to delete this rule? This action cannot be undone.",
+      'Delete Rule',
+      'Are you sure you want to delete this rule? This action cannot be undone.',
       [
         {
-          text: "Cancel",
-          style: "cancel"
+          text: 'Cancel',
+          style: 'cancel',
         },
-        { 
-          text: "Delete", 
-          style: "destructive",
+        {
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
             const success = await deleteRule(ruleId);
             if (success) {
@@ -473,92 +332,247 @@ const TasksScheduleScreen: React.FC = () => {
             } else {
               showNotification('Error', 'Failed to delete rule', 'error');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  // Render the Tasks tab content with integrated schedule
-  const renderTasksTab = () => {
-    const selectedDateStr = selectedDate.toISOString().split('T')[0];
-    const selectedDateEvents = events.filter(event => event.date === selectedDateStr);
-    const filteredTasks = tasks.filter(task => {
-      if (taskFilter === 'mine') return task.assignedTo === 'You';
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      await completeTask(taskId);
+    } catch (error) {
+      showNotification('Error', 'Failed to complete task', 'error');
+    }
+  };
+
+  const handleEvaluateTask = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) {
+      setTaskToEvaluate(task);
+      setEvaluationRating('acceptable');
+      setEvaluationNotes('');
+      setEvaluationPhoto(null);
+      setShowEvaluateTaskModal(true);
+    }
+  };
+
+  const submitTaskEvaluation = async () => {
+    if (!taskToEvaluate) return;
+
+    try {
+      const evalOption = EVALUATION_OPTIONS.find((opt) => opt.value === evaluationRating);
+      const penaltyPoints = evalOption?.penalty || 0;
+
+      if (penaltyPoints > 0) {
+        const assignedUserId = taskToEvaluate.assigned_to;
+        await addPenaltyPoints(assignedUserId, penaltyPoints, taskToEvaluate.id, evaluationRating, evaluationNotes);
+
+        showNotification(
+          'Task Evaluation Submitted',
+          `${penaltyPoints} penalty point${penaltyPoints !== 1 ? 's' : ''} assigned`,
+          'warning'
+        );
+      } else {
+        showNotification('Task Evaluation Submitted', 'No penalties assigned', 'success');
+      }
+
+      setShowEvaluateTaskModal(false);
+      setTaskToEvaluate(null);
+      refreshTasks();
+    } catch (error) {
+      showNotification('Error', 'Failed to submit evaluation', 'error');
+    }
+  };
+
+  const handleRequestSwap = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) {
+      setTaskToSwap(task);
+      setSwapRequest({
+        requestedTo: '',
+        originalDate: task.due_date || '',
+        proposedDate: new Date().toISOString().split('T')[0],
+        message: '',
+      });
+      setShowSwapRequestModal(true);
+    }
+  };
+
+  const submitSwapRequest = async () => {
+    if (!taskToSwap || !swapRequest.requestedTo || !swapRequest.proposedDate) {
+      showNotification('Error', 'Please fill in all required fields', 'error');
+      return;
+    }
+
+    try {
+      await requestSwap(
+        taskToSwap.id,
+        swapRequest.requestedTo,
+        taskToSwap.due_date || '',
+        swapRequest.proposedDate,
+        swapRequest.message
+      );
+
+      setShowSwapRequestModal(false);
+      setTaskToSwap(null);
+    } catch (error) {
+      showNotification('Error', 'Failed to submit swap request', 'error');
+    }
+  };
+
+  const handleSwapResponse = async (swapRequestId: string, accept: boolean) => {
+    try {
+      await respondToSwap(swapRequestId, accept);
+    } catch (error) {
+      showNotification('Error', 'Failed to respond to swap request', 'error');
+    }
+  };
+
+  const getFilteredTasks = () => {
+    return tasks.filter((task) => {
+      const taskDate = task.due_date ? task.due_date.split('T')[0] : '';
+      const matchesSelectedDay = taskDate === selectedDay;
+
+      if (!matchesSelectedDay) return false;
+
+      if (taskFilter === 'mine') {
+        return task.assigned_to === user?.id;
+      }
+      if (taskFilter === 'upcoming') {
+        const dueDate = new Date(task.due_date || '');
+        const today = new Date();
+        const inNextThreeDays =
+          dueDate >= today &&
+          dueDate <= new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+        return inNextThreeDays;
+      }
       return true;
     });
+  };
+
+  const getPendingSwapRequests = () => {
+    return swapRequests.filter(
+      (req) => req.requested_to === user?.id && req.status === 'pending'
+    );
+  };
+
+  const renderWeeklyCalendar = () => {
+    return (
+      <View style={styles.weeklyCalendarContainer}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 10 }]}>
+          Weekly Schedule
+        </Text>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={daysOfWeek}
+          keyExtractor={(item) => item.dateStr}
+          renderItem={({ item }) => {
+            const isSelected = selectedDay === item.dateStr;
+
+            const dayTasks = tasks.filter(
+              (task) => task.due_date && task.due_date.split('T')[0] === item.dateStr
+            );
+
+            const myTasks = dayTasks.filter((task) => task.assigned_to === user?.id);
+
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.dayCard,
+                  item.isToday && styles.todayCard,
+                  isSelected && styles.selectedDayCard,
+                  { backgroundColor: isSelected ? theme.colors.primary + '20' : theme.colors.card },
+                ]}
+                onPress={() => setSelectedDay(item.dateStr)}
+              >
+                <Text
+                  style={[
+                    styles.dayName,
+                    isSelected && { color: theme.colors.primary, fontWeight: '700' },
+                  ]}
+                >
+                  {item.name}
+                </Text>
+                <Text
+                  style={[
+                    styles.dayDate,
+                    isSelected && { color: theme.colors.primary },
+                  ]}
+                >
+                  {item.date.getDate()}
+                </Text>
+
+                {myTasks.length > 0 && (
+                  <View
+                    style={[
+                      styles.taskCountBadge,
+                      { backgroundColor: isSelected ? theme.colors.primary : '#FF9855' },
+                    ]}
+                  >
+                    <Text style={styles.taskCountText}>{myTasks.length}</Text>
+                  </View>
+                )}
+
+                {dayTasks.length > 0 && myTasks.length === 0 && (
+                  <View
+                    style={[
+                      styles.allTasksCountBadge,
+                      { backgroundColor: isSelected ? theme.colors.primary + '80' : '#bbb' },
+                    ]}
+                  >
+                    <Text style={styles.taskCountText}>{dayTasks.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          contentContainerStyle={styles.calendarList}
+        />
+      </View>
+    );
+  };
+
+  const renderTasksTab = () => {
+    const filteredTasks = getFilteredTasks();
+    const pendingSwapRequests = getPendingSwapRequests();
+
+    const selectedDateObj = new Date(selectedDay);
+    const formattedDate = selectedDateObj.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+
+    const isToday = selectedDateObj.toDateString() === new Date().toDateString();
 
     return (
       <View style={styles.tabContent}>
-        {/* Calendar View */}
-        <View style={styles.calendarContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 10 }]}>
-            Schedule
-          </Text>
-          <View style={styles.calendarPlaceholder}>
-            <Text style={[styles.placeholderText, { color: theme.colors.text }]}>
-              Week of {selectedDate.toLocaleDateString()}
-            </Text>
-            <View style={styles.daysRow}>
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-                <TouchableOpacity 
-                  key={day} 
-                  style={[
-                    styles.dayButton,
-                    i === selectedDate.getDay() && {
-                      backgroundColor: theme.colors.primary + '20',
-                      borderColor: theme.colors.primary
-                    }
-                  ]}
-                  onPress={() => {
-                    const newDate = new Date();
-                    newDate.setDate(newDate.getDate() - newDate.getDay() + i);
-                    setSelectedDate(newDate);
-                  }}
-                >
-                  <Text style={[
-                    styles.dayButtonText, 
-                    i === selectedDate.getDay() && { color: theme.colors.primary, fontWeight: '700' }
-                  ]}>
-                    {day}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-        
-        {/* Events for selected date */}
-        {selectedDateEvents.length > 0 && (
-          <View style={styles.selectedDateEventsContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {selectedDate.toDateString() === new Date().toDateString() ? "Today's Events" : `Events for ${selectedDate.toLocaleDateString()}`}
-              </Text>
-              <TouchableOpacity onPress={() => showNotification('Add Event', 'Creating a new event...', 'info')}>
-                <Ionicons name="add-circle-outline" size={22} color={theme.colors.primary} />
-              </TouchableOpacity>
-            </View>
-            {selectedDateEvents.map(event => renderEventItem(event))}
-          </View>
-        )}
+        {renderWeeklyCalendar()}
 
-        {/* Task Filters */}
-        <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            Tasks
+        <View style={styles.selectedDayHeader}>
+          <Text style={[styles.selectedDayText, { color: theme.colors.text }]}>
+            {isToday ? "Today's Tasks" : `Tasks for ${formattedDate}`}
           </Text>
-          <TouchableOpacity onPress={() => setShowNewTaskModal(true)}>
-            <Ionicons name="add-circle-outline" size={22} color={theme.colors.primary} />
+          <TouchableOpacity
+            style={[styles.addTaskButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => {
+              setNewTask((prev) => ({ ...prev, dueDate: selectedDay }));
+              setShowNewTaskModal(true);
+            }}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={styles.addTaskText}>Add Task</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.filterContainer}>
           <TouchableOpacity
             style={[
               styles.filterButton,
               taskFilter === 'mine' && styles.activeFilterButton,
-              { backgroundColor: taskFilter === 'mine' ? theme.colors.primary : 'rgba(150, 150, 150, 0.1)' }
+              { backgroundColor: taskFilter === 'mine' ? theme.colors.primary : 'rgba(150, 150, 150, 0.1)' },
             ]}
             onPress={() => setTaskFilter('mine')}
           >
@@ -566,11 +580,12 @@ const TasksScheduleScreen: React.FC = () => {
               My Tasks
             </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.filterButton,
               taskFilter === 'all' && styles.activeFilterButton,
-              { backgroundColor: taskFilter === 'all' ? theme.colors.primary : 'rgba(150, 150, 150, 0.1)' }
+              { backgroundColor: taskFilter === 'all' ? theme.colors.primary : 'rgba(150, 150, 150, 0.1)' },
             ]}
             onPress={() => setTaskFilter('all')}
           >
@@ -578,161 +593,177 @@ const TasksScheduleScreen: React.FC = () => {
               All Tasks
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              taskFilter === 'upcoming' && styles.activeFilterButton,
-              { backgroundColor: taskFilter === 'upcoming' ? theme.colors.primary : 'rgba(150, 150, 150, 0.1)' }
-            ]}
-            onPress={() => setTaskFilter('upcoming')}
-          >
-            <Text style={[styles.filterText, { color: taskFilter === 'upcoming' ? '#fff' : theme.colors.text }]}>
-              Upcoming
-            </Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Tasks List */}
         <View style={styles.taskListContainer}>
-          {filteredTasks.length === 0 ? (
+          {tasksLoading ? (
+            <Text style={styles.loadingText}>Loading tasks...</Text>
+          ) : filteredTasks.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <Ionicons name="checkmark-circle-outline" size={60} color="rgba(150, 150, 150, 0.5)" />
-              <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
-                No tasks to display
-              </Text>
+              <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>No tasks to display</Text>
               <Text style={styles.emptyStateSubtext}>
-                {taskFilter === 'mine' ? "You have no tasks assigned to you" : "No tasks found"}
+                {taskFilter === 'mine'
+                  ? `You have no tasks assigned for ${isToday ? 'today' : formattedDate}`
+                  : `No tasks scheduled for ${isToday ? 'today' : formattedDate}`}
               </Text>
             </View>
           ) : (
-            filteredTasks.map(task => renderTaskItem(task))
+            filteredTasks.map((task) => renderTaskItem(task))
           )}
         </View>
 
-        {/* Swap Requests Section */}
-        {filteredTasks.length > 0 && (
+        {pendingSwapRequests.length > 0 && (
           <View style={styles.swapRequestsContainer}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                Swap Requests
-              </Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Swap Requests</Text>
               <TouchableOpacity>
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
-            {swapRequests.filter(req => req.requestedTo === 'You' && req.status === 'pending').length === 0 ? (
-              <Text style={styles.noSwapRequestsText}>No pending swap requests</Text>
-            ) : (
-              swapRequests
-                .filter(req => req.requestedTo === 'You' && req.status === 'pending')
-                .map(request => renderSwapRequestItem(request))
-            )}
+
+            {pendingSwapRequests.map((request) => renderSwapRequestItem(request))}
           </View>
         )}
       </View>
     );
   };
 
-  // Render an individual task item
   const renderTaskItem = (task: any) => {
-    const isMyTask = task.assignedTo === 'You';
+    const isMyTask = task.assigned_to === user?.id;
     const isPending = task.status === 'pending';
     const isCompleted = task.status === 'completed';
-    const dueDate = new Date(task.dueDate);
-    const today = new Date();
-    const daysRemaining = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+
+    const assignedMember = members.find((m) => m.user_id === task.assigned_to);
+    const assignedName = assignedMember ? assignedMember.full_name : 'Unknown';
+
+    const categoryInfo =
+      CHORE_CATEGORIES.find((cat) => cat.id === task.category) ||
+      CHORE_CATEGORIES[CHORE_CATEGORIES.length - 1];
+
     return (
-      <View 
-        key={task.id}
-        style={[
-          styles.taskCard,
-          { backgroundColor: theme.colors.card }
-        ]}
+      <View
+        key={createStableKey(task.id, 'task')}
+        style={[styles.taskCard, { backgroundColor: theme.colors.card }]}
       >
-        {/* Task Header */}
+        <View style={styles.taskHeaderBar}>
+          <View
+            style={[
+              styles.categoryColorIndicator,
+              { backgroundColor: categoryInfo.color },
+            ]}
+          />
+        </View>
+
         <View style={styles.taskHeader}>
-          <View style={[
-            styles.taskIconContainer,
-            { backgroundColor: isCompleted ? 'rgba(46, 175, 137, 0.1)' : 'rgba(84, 109, 229, 0.1)' }
-          ]}>
+          <View
+            style={[
+              styles.taskIconContainer,
+              {
+                backgroundColor: isCompleted
+                  ? 'rgba(46, 175, 137, 0.1)'
+                  : `${categoryInfo.color}20`,
+              },
+            ]}
+          >
             <Ionicons
-              name={task.icon || 'checkmark-circle-outline'}
+              name={task.icon || categoryInfo.icon}
               size={20}
-              color={isCompleted ? '#2EAF89' : '#546DE5'}
+              color={isCompleted ? '#2EAF89' : categoryInfo.color}
             />
           </View>
+
           <View style={styles.taskTitleContainer}>
-            <Text style={[
-              styles.taskTitle,
-              isCompleted && styles.completedTaskTitle,
-              { color: theme.colors.text }
-            ]}>
+            <Text
+              style={[
+                styles.taskTitle,
+                isCompleted && styles.completedTaskTitle,
+                { color: theme.colors.text },
+              ]}
+            >
               {task.title}
             </Text>
-            <Text style={styles.taskDueDate}>
-              {daysRemaining === 0 ? 'Due today' : 
-                daysRemaining < 0 ? `Overdue by ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) !== 1 ? 's' : ''}` : 
-                `Due in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}
-            </Text>
+            {task.description && (
+              <Text style={styles.taskDescription} numberOfLines={2}>
+                {task.description}
+              </Text>
+            )}
           </View>
+
           <View style={styles.taskAssigneeContainer}>
-            <Text style={[
-              styles.taskAssignee,
-              isMyTask && styles.myTaskLabel,
-              { color: isMyTask ? '#546DE5' : theme.colors.text }
-            ]}>
-              {isMyTask ? 'You' : task.assignedTo}
+            <UserAvatar
+              name={assignedName}
+              size={32}
+              isCurrentUser={isMyTask}
+              showBorder
+            />
+            <Text
+              style={[
+                styles.assigneeName,
+                isMyTask && styles.myTaskLabel,
+                { color: isMyTask ? '#546DE5' : theme.colors.text },
+              ]}
+            >
+              {isMyTask ? 'You' : assignedName}
             </Text>
           </View>
         </View>
 
-        {/* Task Actions */}
+        {task.penalty_points && task.penalty_points > 0 && (
+          <PenaltyStatusBadge points={task.penalty_points} />
+        )}
+
         <View style={styles.taskActions}>
           {isMyTask && isPending && (
             <>
-              <TouchableOpacity 
-                style={[styles.taskActionButton, styles.completeButton]} 
+              <TouchableOpacity
+                style={[styles.taskActionButton, styles.completeButton]}
                 onPress={() => handleCompleteTask(task.id)}
               >
                 <Ionicons name="checkmark-outline" size={18} color="#fff" />
                 <Text style={styles.actionButtonText}>Complete</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.taskActionButton, styles.swapButton]} 
+
+              <TouchableOpacity
+                style={[styles.taskActionButton, styles.swapButton]}
                 onPress={() => handleRequestSwap(task.id)}
               >
                 <Ionicons name="swap-horizontal-outline" size={18} color="#fff" />
-                <Text style={styles.actionButtonText}>Request Swap</Text>
+                <Text style={styles.actionButtonText}>Swap</Text>
               </TouchableOpacity>
             </>
           )}
-          {!isMyTask && isCompleted && (
-            <TouchableOpacity 
-              style={[styles.taskActionButton, styles.evaluateButton]}
-              onPress={() => handleEvaluateTask(task.id)}
-            >
-              <Ionicons name="star-outline" size={18} color="#fff" />
-              <Text style={styles.actionButtonText}>Evaluate</Text>
-            </TouchableOpacity>
-          )}
-          {isCompleted && (
+
+          {!isMyTask &&
+            isCompleted &&
+            task.completion_history &&
+            task.completion_history.length > 0 &&
+            !task.completion_history[0].rating && (
+              <TouchableOpacity
+                style={[styles.taskActionButton, styles.evaluateButton]}
+                onPress={() => handleEvaluateTask(task.id)}
+              >
+                <Ionicons name="star-outline" size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Evaluate</Text>
+              </TouchableOpacity>
+            )}
+
+          {isCompleted && task.completion_history && task.completion_history.length > 0 && (
             <View style={styles.completedStatusContainer}>
               <Ionicons name="checkmark-circle" size={18} color="#2EAF89" />
               <Text style={styles.completedStatusText}>
-                Completed by {task.assignedTo}
+                Completed by {task.completion_history[0].completed_by_name || 'Unknown'}
               </Text>
             </View>
           )}
         </View>
 
-        {/* Rotation Info */}
-        {task.rotationEnabled && (
+        {task.rotation_enabled && task.rotation_members && (
           <View style={styles.rotationInfo}>
             <Ionicons name="repeat" size={14} color="#999" />
             <Text style={styles.rotationText}>
-              Rotates {task.repeatFrequency} between {task.rotationMembers.join(', ')}
+              Rotates {task.repeat_frequency || 'weekly'} between{' '}
+              {task.rotation_members.map((m: any) => m.user_name || 'Unknown').join(', ')}
             </Text>
           </View>
         )}
@@ -740,16 +771,16 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
-  // Render a swap request item
   const renderSwapRequestItem = (request: any) => {
     return (
       <View key={request.id} style={[styles.swapRequestCard, { backgroundColor: theme.colors.card }]}>
         <View style={styles.swapRequestInfo}>
           <Text style={[styles.swapRequestTitle, { color: theme.colors.text }]}>
-            {request.requestedBy} wants to swap "{request.taskTitle}"
+            {request.requested_by_name} wants to swap "{request.task_title || 'a task'}"
           </Text>
           <Text style={styles.swapRequestDetails}>
-            From {new Date(request.originalDate).toLocaleDateString()} to {new Date(request.proposedDate).toLocaleDateString()}
+            From {new Date(request.original_date).toLocaleDateString()} to{' '}
+            {new Date(request.proposed_date).toLocaleDateString()}
           </Text>
           {request.message && (
             <View style={styles.swapRequestMessage}>
@@ -757,23 +788,18 @@ const TasksScheduleScreen: React.FC = () => {
             </View>
           )}
         </View>
+
         <View style={styles.swapRequestActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.swapActionButton, styles.acceptButton]}
-            onPress={() => {
-              showNotification('Swap Accepted', `You've agreed to swap with ${request.requestedBy}`, 'success');
-              setSwapRequests(prev => prev.map(r => r.id === request.id ? {...r, status: 'accepted'} : r));
-            }}
+            onPress={() => handleSwapResponse(request.id, true)}
           >
             <Text style={styles.swapActionButtonText}>Accept</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.swapActionButton, styles.rejectButton]}
-            onPress={() => {
-              showNotification('Swap Declined', `You've declined the swap request from ${request.requestedBy}`, 'info');
-              setSwapRequests(prev => prev.map(r => r.id === request.id ? {...r, status: 'rejected'} : r));
-            }}
+            onPress={() => handleSwapResponse(request.id, false)}
           >
             <Text style={styles.swapActionButtonText}>Decline</Text>
           </TouchableOpacity>
@@ -782,85 +808,15 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
-  // Render an individual event item
-  const renderEventItem = (event: any) => {
-    const getEventTypeColor = () => {
-      if (event.category === 'payment') return '#EB4D4B';
-      if (event.title.toLowerCase().includes('meeting')) return '#546DE5';
-      return '#F7B731';
-    };
-    
-    return (
-      <View 
-        key={event.id}
-        style={[styles.eventCard, { backgroundColor: theme.colors.card }]}
-      >
-        <View style={[styles.eventColorIndicator, { backgroundColor: getEventTypeColor() }]} />
-        <View style={styles.eventContent}>
-          <View style={styles.eventHeader}>
-            <Text style={[styles.eventTitle, { color: theme.colors.text }]}>
-              {event.title}
-            </Text>
-            {event.recurring && (
-              <View style={styles.recurringBadge}>
-                <Ionicons name="repeat" size={12} color="#546DE5" />
-                <Text style={styles.recurringText}>{event.recurrencePattern}</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.eventDetails}>
-            <View style={styles.eventDetailItem}>
-              <Ionicons name="time-outline" size={14} color="#999" />
-              <Text style={styles.eventDetailText}>
-                {event.isAllDay ? 'All day' : `${event.time}${event.endTime ? ' - ' + event.endTime : ''}`}
-              </Text>
-            </View>
-            {event.location && (
-              <View style={styles.eventDetailItem}>
-                <Ionicons name="location-outline" size={14} color="#999" />
-                <Text style={styles.eventDetailText}>
-                  {event.location}
-                </Text>
-              </View>
-            )}
-            <View style={styles.eventDetailItem}>
-              <Ionicons name="person-outline" size={14} color="#999" />
-              <Text style={styles.eventDetailText}>
-                {event.createdBy === 'System' ? 'Automatic' : `Created by ${event.createdBy}`}
-              </Text>
-            </View>
-          </View>
-          {event.description && (
-            <Text style={styles.eventDescription}>
-              {event.description}
-            </Text>
-          )}
-          {event.attendees && event.attendees.length > 0 && (
-            <View style={styles.attendeesContainer}>
-              <Text style={styles.attendeesLabel}>
-                {event.attendees.length} {event.attendees.length === 1 ? 'Person' : 'People'} Involved:
-              </Text>
-              <Text style={styles.attendeesList}>
-                {event.attendees.join(', ')}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  // Render the Rules tab content - updated to use real data
   const renderRulesTab = () => {
-    const filteredRules = ruleFilter 
-      ? houseRules.filter(rule => rule.category === ruleFilter)
+    const filteredRules = ruleFilter
+      ? houseRules.filter((rule) => rule.category === ruleFilter)
       : houseRules;
-      
+
     return (
       <View style={styles.tabContent}>
-        {/* Rule Categories Filter */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.ruleCategoriesContainer}
         >
@@ -871,39 +827,43 @@ const TasksScheduleScreen: React.FC = () => {
             ]}
             onPress={() => setRuleFilter(null)}
           >
-            <Ionicons 
-              name="list" 
-              size={16} 
-              color={!ruleFilter ? '#fff' : isDarkMode ? '#999' : '#666'} 
+            <Ionicons
+              name="list"
+              size={16}
+              color={!ruleFilter ? '#fff' : isDarkMode ? '#999' : '#666'}
             />
-            <Text 
+            <Text
               style={[
-                styles.categoryFilterText, 
-                {color: !ruleFilter ? '#fff' : isDarkMode ? '#999' : '#666'}
+                styles.categoryFilterText,
+                { color: !ruleFilter ? '#fff' : isDarkMode ? '#999' : '#666' },
               ]}
             >
               All Rules
             </Text>
           </TouchableOpacity>
-          {RULE_CATEGORIES.map(category => (
+          {RULE_CATEGORIES.map((category) => (
             <TouchableOpacity
               key={category.id}
               style={[
                 styles.categoryFilterButton,
                 ruleFilter === category.id && styles.activeCategoryFilter,
-                { backgroundColor: ruleFilter === category.id ? category.color : 'rgba(150, 150, 150, 0.1)' }
+                {
+                  backgroundColor: ruleFilter === category.id
+                    ? category.color
+                    : 'rgba(150, 150, 150, 0.1)',
+                },
               ]}
-              onPress={() => setRuleFilter(prev => prev === category.id ? null : category.id)}
+              onPress={() => setRuleFilter((prev) => (prev === category.id ? null : category.id))}
             >
-              <Ionicons 
-                name={category.icon} 
-                size={16} 
-                color={ruleFilter === category.id ? '#fff' : category.color} 
+              <Ionicons
+                name={category.icon}
+                size={16}
+                color={ruleFilter === category.id ? '#fff' : category.color}
               />
-              <Text 
+              <Text
                 style={[
-                  styles.categoryFilterText, 
-                  {color: ruleFilter === category.id ? '#fff' : category.color}
+                  styles.categoryFilterText,
+                  { color: ruleFilter === category.id ? '#fff' : category.color },
                 ]}
               >
                 {category.id}
@@ -911,38 +871,8 @@ const TasksScheduleScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
-        
-        <View style={styles.rulesSummary}>
-          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={styles.ruleSummaryNumber}>
-              {houseRules.length}
-            </Text>
-            <Text style={styles.ruleSummaryLabel}>
-              Total Rules
-            </Text>
-          </View>
-          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={styles.ruleSummaryNumber}>
-              {user && houseRules.filter(rule => rule.agreements?.some(a => a.user_id === user.id)).length}
-            </Text>
-            <Text style={styles.ruleSummaryLabel}>
-              Rules You Agreed To
-            </Text>
-          </View>
-          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={styles.ruleSummaryNumber}>
-              {members.length > 0 && houseRules.filter(rule => rule.agreements && rule.agreements.length >= members.length).length}
-            </Text>
-            <Text style={styles.ruleSummaryLabel}>
-              Unanimous Rules
-            </Text>
-          </View>
-        </View>
 
         <View style={styles.ruleListContainer}>
-          <Text style={[styles.sectionLabel, { color: isDarkMode ? '#999' : '#666' }]}>
-            {filteredRules.length} House Rules
-          </Text>
           {rulesLoading ? (
             <View style={styles.emptyStateContainer}>
               <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
@@ -956,15 +886,17 @@ const TasksScheduleScreen: React.FC = () => {
                 No house rules found
               </Text>
               <Text style={styles.emptyStateSubtext}>
-                {ruleFilter ? `No ${ruleFilter} rules exist yet` : "Create your first house rule to get started"}
+                {ruleFilter
+                  ? `No ${ruleFilter} rules exist yet`
+                  : 'Create your first house rule to get started'}
               </Text>
             </View>
           ) : (
-            filteredRules.map(rule => renderRuleItem(rule))
+            filteredRules.map((rule) => renderRuleItem(rule))
           )}
         </View>
-        <TouchableOpacity 
-          style={[styles.createRuleButton, { backgroundColor: theme.colors.primary }]} 
+        <TouchableOpacity
+          style={[styles.createRuleButton, { backgroundColor: theme.colors.primary }]}
           onPress={() => setShowNewRuleModal(true)}
         >
           <Ionicons name="add" size={20} color="#fff" />
@@ -974,29 +906,27 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
-  // Render an individual rule item - updated to include edit/delete options
   const renderRuleItem = (rule: HouseRule) => {
-    const category = RULE_CATEGORIES.find(cat => cat.id === rule.category);
+    const category = RULE_CATEGORIES.find((cat) => cat.id === rule.category);
     const isExpanded = expandedRule === rule.id;
-    const hasAgreed = user && rule.agreements?.some(a => a.user_id === user.id);
+    const hasAgreed = user && rule.agreements?.some((a) => a.user_id === user.id);
     const isCreator = user && rule.created_by === user.id;
-    
+
     return (
-      <View 
+      <View
         key={createStableKey(rule.id, 'rule')}
-        style={[
-          styles.ruleCard, 
-          { backgroundColor: theme.colors.card }
-        ]}
+        style={[styles.ruleCard, { backgroundColor: theme.colors.card }]}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.ruleHeader}
           onPress={() => setExpandedRule(isExpanded ? null : rule.id)}
         >
-          <View style={[
-            styles.ruleCategoryBadge,
-            { backgroundColor: category ? `${category.color}20` : '#26C6DA20' }
-          ]}>
+          <View
+            style={[
+              styles.ruleCategoryBadge,
+              { backgroundColor: category ? `${category.color}20` : '#26C6DA20' },
+            ]}
+          >
             <Ionicons
               name={category?.icon || 'ellipsis-horizontal-outline'}
               size={16}
@@ -1004,18 +934,20 @@ const TasksScheduleScreen: React.FC = () => {
             />
           </View>
           <View style={styles.ruleTitleContainer}>
-            <Text style={[styles.ruleTitle, { color: theme.colors.text }]}>
-              {rule.title}
-            </Text>
+            <Text style={[styles.ruleTitle, { color: theme.colors.text }]}>{rule.title}</Text>
             <Text style={styles.ruleInfo}>
-              Added by {rule.creator_name || 'Unknown'} • 
-              {rule.agreements ? `${rule.agreements.length} ${rule.agreements.length === 1 ? 'person' : 'people'} agreed` : 'No agreements yet'}
+              Added by {rule.creator_name || 'Unknown'} •{' '}
+              {rule.agreements
+                ? `${rule.agreements.length} ${
+                    rule.agreements.length === 1 ? 'person' : 'people'
+                  } agreed`
+                : 'No agreements yet'}
             </Text>
           </View>
           <View style={styles.ruleActions}>
             {isCreator && (
               <View style={styles.ruleActionButtons}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.ruleActionButton}
                   onPress={() => {
                     setRuleToEdit(rule);
@@ -1027,9 +959,13 @@ const TasksScheduleScreen: React.FC = () => {
                     setShowEditRuleModal(true);
                   }}
                 >
-                  <Ionicons name="pencil-outline" size={18} color={isDarkMode ? '#999' : '#666'} />
+                  <Ionicons
+                    name="pencil-outline"
+                    size={18}
+                    color={isDarkMode ? '#999' : '#666'}
+                  />
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.ruleActionButton}
                   onPress={() => handleDeleteRule(rule.id)}
                 >
@@ -1037,10 +973,10 @@ const TasksScheduleScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             )}
-            <Ionicons 
-              name={isExpanded ? 'chevron-up' : 'chevron-down'} 
-              size={20} 
-              color="#999" 
+            <Ionicons
+              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#999"
             />
           </View>
         </TouchableOpacity>
@@ -1050,33 +986,46 @@ const TasksScheduleScreen: React.FC = () => {
               {rule.description}
             </Text>
             <View style={styles.ruleAgreementStatus}>
-              <Text style={[styles.ruleAgreementLabel, { color: isDarkMode ? '#999' : '#666' }]}>
+              <Text
+                style={[styles.ruleAgreementLabel, { color: isDarkMode ? '#999' : '#666' }]}
+              >
                 Agreements:
               </Text>
               <View style={styles.ruleAgreementList}>
-                {members.map(member => {
-                  const hasAgreed = rule.agreements?.some(a => a.user_id === member.user_id);
+                {members.map((member) => {
+                  const hasAgreed = rule.agreements?.some((a) => a.user_id === member.user_id);
                   const isCurrentUser = user && member.user_id === user.id;
                   return (
-                    <View 
+                    <View
                       key={member.user_id}
                       style={[
                         styles.ruleAgreementBadge,
-                        hasAgreed ? 
-                          { backgroundColor: '#2EAF8920', borderColor: '#2EAF89' } : 
-                          { backgroundColor: 'rgba(150, 150, 150, 0.1)', borderColor: 'rgba(150, 150, 150, 0.2)' }
+                        hasAgreed
+                          ? {
+                              backgroundColor: '#2EAF8920',
+                              borderColor: '#2EAF89',
+                            }
+                          : {
+                              backgroundColor: 'rgba(150, 150, 150, 0.1)',
+                              borderColor: 'rgba(150, 150, 150, 0.2)',
+                            },
                       ]}
                     >
-                      <Text 
+                      <Text
                         style={[
                           styles.ruleAgreementPerson,
-                          { color: hasAgreed ? '#2EAF89' : '#999' }
+                          { color: hasAgreed ? '#2EAF89' : '#999' },
                         ]}
                       >
                         {isCurrentUser ? 'You' : member.full_name}
                       </Text>
                       {hasAgreed && (
-                        <Ionicons name="checkmark" size={12} color="#2EAF89" style={styles.ruleCheckIcon} />
+                        <Ionicons
+                          name="checkmark"
+                          size={12}
+                          color="#2EAF89"
+                          style={styles.ruleCheckIcon}
+                        />
                       )}
                     </View>
                   );
@@ -1089,28 +1038,38 @@ const TasksScheduleScreen: React.FC = () => {
                   Discussion:
                 </Text>
                 {rule.comments.map((comment, index) => (
-                  <View 
+                  <View
                     key={createStableKey(`${comment.id}-${index}`, 'comment')}
                     style={[
                       styles.commentItem,
-                      { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }
+                      {
+                        backgroundColor: isDarkMode
+                          ? 'rgba(255,255,255,0.05)'
+                          : 'rgba(0,0,0,0.03)',
+                      },
                     ]}
                   >
                     <View style={styles.commentHeader}>
                       <View style={styles.commentUserContainer}>
-                        <UserAvatar 
-                          isCurrentUser={comment.user_id === user?.id}
-                          name={comment.user_name || 'Unknown'}
-                        />
-                        <Text style={[
-                          styles.commentUser, 
-                          { color: comment.user_id === user?.id ? theme.colors.primary : theme.colors.text }
-                        ]}>
+                        <Text
+                          style={[
+                            styles.commentUser,
+                            {
+                              color:
+                                comment.user_id === user?.id
+                                  ? theme.colors.primary
+                                  : theme.colors.text,
+                            },
+                          ]}
+                        >
                           {comment.user_id === user?.id ? 'You' : comment.user_name}
                         </Text>
                       </View>
                       <Text style={styles.commentTime}>
-                        {new Date(comment.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        {new Date(comment.created_at).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
                       </Text>
                     </View>
                     <Text style={[styles.commentText, { color: theme.colors.text }]}>
@@ -1124,7 +1083,10 @@ const TasksScheduleScreen: React.FC = () => {
               <TextInput
                 style={[
                   styles.commentInput,
-                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }
+                  {
+                    color: theme.colors.text,
+                    borderColor: isDarkMode ? '#333' : '#eee',
+                  },
                 ]}
                 placeholder="Add your comment..."
                 placeholderTextColor={isDarkMode ? '#666' : '#999'}
@@ -1136,7 +1098,7 @@ const TasksScheduleScreen: React.FC = () => {
                 style={[
                   styles.commentButton,
                   { backgroundColor: theme.colors.primary },
-                  !newComment.trim() && { opacity: 0.6 }
+                  !newComment.trim() && { opacity: 0.6 },
                 ]}
                 disabled={!newComment.trim()}
                 onPress={() => handleAddComment(rule.id)}
@@ -1147,22 +1109,30 @@ const TasksScheduleScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.toggleAgreementButton,
-                hasAgreed ? 
-                  { backgroundColor: 'rgba(150, 150, 150, 0.1)' } : 
-                  { backgroundColor: '#2EAF8920' }
+                hasAgreed
+                  ? { backgroundColor: 'rgba(150, 150, 150, 0.1)' }
+                  : { backgroundColor: '#2EAF8920' },
               ]}
               onPress={() => handleRuleAgreement(rule.id)}
             >
-              <Text style={[
-                styles.toggleAgreementText,
-                { color: hasAgreed ? isDarkMode ? '#999' : '#666' : '#2EAF89' }
-              ]}>
+              <Text
+                style={[
+                  styles.toggleAgreementText,
+                  {
+                    color: hasAgreed
+                      ? isDarkMode
+                        ? '#999'
+                        : '#666'
+                      : '#2EAF89',
+                  },
+                ]}
+              >
                 {hasAgreed ? 'Withdraw Agreement' : 'I Agree to This Rule'}
               </Text>
-              <Ionicons 
-                name={hasAgreed ? 'close-circle-outline' : 'checkmark-circle-outline'} 
-                size={18} 
-                color={hasAgreed ? (isDarkMode ? '#999' : '#666') : '#2EAF89'} 
+              <Ionicons
+                name={hasAgreed ? 'close-circle-outline' : 'checkmark-circle-outline'}
+                size={18}
+                color={hasAgreed ? (isDarkMode ? '#999' : '#666') : '#2EAF89'}
               />
             </TouchableOpacity>
           </View>
@@ -1171,7 +1141,6 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
-  // Render the New Task Modal
   const renderNewTaskModal = () => {
     return (
       <Modal
@@ -1184,7 +1153,7 @@ const TasksScheduleScreen: React.FC = () => {
           <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                Create New Task
+                Create Chore Task
               </Text>
               <TouchableOpacity
                 style={styles.modalCloseButton}
@@ -1193,111 +1162,295 @@ const TasksScheduleScreen: React.FC = () => {
                 <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
               </TouchableOpacity>
             </View>
+
             <ScrollView style={styles.modalScrollContent}>
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Task Title *</Text>
               <TextInput
-                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter task title"
+                style={[
+                  styles.textInput,
+                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
+                ]}
+                placeholder="Enter task title (e.g. Clean Bathroom)"
                 placeholderTextColor={isDarkMode ? '#666' : '#999'}
                 value={newTask.title}
-                onChangeText={(text) => setNewTask({...newTask, title: text})}
+                onChangeText={(text) => setNewTask({ ...newTask, title: text })}
               />
+
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description</Text>
               <TextInput
-                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter task description"
+                style={[
+                  styles.textAreaInput,
+                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
+                ]}
+                placeholder="Enter task details and instructions"
                 placeholderTextColor={isDarkMode ? '#666' : '#999'}
                 value={newTask.description}
-                onChangeText={(text) => setNewTask({...newTask, description: text})}
+                onChangeText={(text) => setNewTask({ ...newTask, description: text })}
                 multiline
               />
+
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Due Date</Text>
               <TextInput
-                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                style={[
+                  styles.textInput,
+                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
+                ]}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor={isDarkMode ? '#666' : '#999'}
                 value={newTask.dueDate}
-                onChangeText={(text) => setNewTask({...newTask, dueDate: text})}
+                onChangeText={(text) => setNewTask({ ...newTask, dueDate: text })}
               />
+
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
-              <View style={styles.categoriesContainer}>
-                {['cleaning', 'cooking', 'shopping', 'maintenance', 'other'].map((category) => (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScrollView}>
+                {CHORE_CATEGORIES.map((category) => (
                   <TouchableOpacity
-                    key={category}
+                    key={category.id}
                     style={[
-                      styles.categoryOption,
-                      newTask.category === category && styles.activeCategoryOption
+                      styles.categoryChip,
+                      newTask.category === category.id && {
+                        backgroundColor: category.color + '30',
+                        borderColor: category.color,
+                      },
                     ]}
-                    onPress={() => setNewTask({...newTask, category})}
+                    onPress={() =>
+                      setNewTask({ ...newTask, category: category.id, icon: category.icon })
+                    }
                   >
-                    <Text 
+                    <Ionicons
+                      name={category.icon}
+                      size={18}
+                      color={
+                        newTask.category === category.id
+                          ? category.color
+                          : isDarkMode
+                          ? '#999'
+                          : '#666'
+                      }
+                    />
+                    <Text
                       style={[
-                        styles.categoryOptionText, 
-                        {color: newTask.category === category ? theme.colors.primary : isDarkMode ? '#999' : '#666'}
+                        styles.categoryChipText,
+                        {
+                          color:
+                            newTask.category === category.id
+                              ? category.color
+                              : isDarkMode
+                              ? '#999'
+                              : '#666',
+                        },
                       ]}
                     >
-                      {category.charAt(0).toUpperCase() + category.slice(1)}
+                      {category.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Assigned To</Text>
+              </ScrollView>
+
+              <Text style={[styles.inputLabel, { color: theme.colors.text, marginTop: 15 }]}>
+                Assigned To
+              </Text>
               <View style={styles.assigneeContainer}>
-                {['You', 'Alex', 'Jordan'].map((person) => (
-                  <TouchableOpacity
-                    key={person}
-                    style={[
-                      styles.assigneeOption,
-                      newTask.assignedTo === person && styles.activeAssigneeOption
-                    ]}
-                    onPress={() => setNewTask({...newTask, assignedTo: person})}
-                  >
-                    <Text 
+                {membersLoading ? (
+                  <Text style={{ color: isDarkMode ? '#999' : '#666' }}>
+                    Loading members...
+                  </Text>
+                ) : members && members.length > 0 ? (
+                  members.map((member) => (
+                    <TouchableOpacity
+                      key={member.user_id}
                       style={[
-                        styles.assigneeOptionText, 
-                        {color: newTask.assignedTo === person ? '#fff' : isDarkMode ? '#999' : '#666'}
+                        styles.assigneeOption,
+                        newTask.assignedTo === member.user_id && styles.activeAssigneeOption,
+                        {
+                          backgroundColor:
+                            newTask.assignedTo === member.user_id
+                              ? theme.colors.primary
+                              : 'rgba(150, 150, 150, 0.1)',
+                        },
+                      ]}
+                      onPress={() => setNewTask({ ...newTask, assignedTo: member.user_id })}
+                    >
+                      <UserAvatar
+                        name={member.full_name}
+                        size={24}
+                        isCurrentUser={member.user_id === user?.id}
+                        showBorder={newTask.assignedTo === member.user_id}
+                      />
+                      <Text
+                        style={[
+                          styles.assigneeOptionText,
+                          {
+                            color:
+                              newTask.assignedTo === member.user_id
+                                ? '#fff'
+                                : isDarkMode
+                                ? '#999'
+                                : '#666',
+                          },
+                        ]}
+                      >
+                        {member.user_id === user?.id ? 'You' : member.full_name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View>
+                    <Text style={{ color: isDarkMode ? '#999' : '#666', marginBottom: 8 }}>
+                      No home members found
+                    </Text>
+                    <Text style={{ color: 'orange', fontSize: 12, marginBottom: 16 }}>
+                      This could be because you're not part of a home yet or there was an error loading your home data.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.rotationSection}>
+                <View style={styles.rotationToggleContainer}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Enable Rotation</Text>
+                  <Switch
+                    value={newTask.rotationEnabled}
+                    onValueChange={(value) => setNewTask({ ...newTask, rotationEnabled: value })}
+                    trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
+                    thumbColor={newTask.rotationEnabled ? theme.colors.primary : '#f4f3f4'}
+                  />
+                </View>
+
+                {newTask.rotationEnabled && (
+                  <>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                      Rotation Frequency
+                    </Text>
+                    <View style={styles.frequencyContainer}>
+                      {['weekly', 'biweekly', 'monthly'].map((freq) => (
+                        <TouchableOpacity
+                          key={freq}
+                          style={[
+                            styles.frequencyOption,
+                            newTask.rotationFrequency === freq && styles.activeFrequencyOption,
+                            {
+                              backgroundColor:
+                                newTask.rotationFrequency === freq
+                                  ? theme.colors.primary
+                                  : 'rgba(150, 150, 150, 0.1)',
+                            },
+                          ]}
+                          onPress={() => setNewTask({ ...newTask, rotationFrequency: freq })}
+                        >
+                          <Text
+                            style={[
+                              styles.frequencyOptionText,
+                              {
+                                color:
+                                  newTask.rotationFrequency === freq
+                                    ? '#fff'
+                                    : isDarkMode
+                                    ? '#999'
+                                    : '#666',
+                              },
+                            ]}
+                          >
+                            {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                      Rotation Members
+                    </Text>
+                    {members && members.length > 0 ? (
+                      members.map((member) => (
+                        <View key={member.user_id} style={styles.rotationMemberRow}>
+                          <View style={styles.rotationMemberInfo}>
+                            <UserAvatar
+                              name={member.full_name}
+                              size={24}
+                              isCurrentUser={member.user_id === user?.id}
+                            />
+                            <Text style={{ color: theme.colors.text, marginLeft: 8 }}>
+                              {member.user_id === user?.id ? 'You' : member.full_name}
+                            </Text>
+                          </View>
+                          <Switch
+                            value={newTask.rotationMembers.includes(member.user_id)}
+                            onValueChange={(value) => {
+                              if (value) {
+                                setNewTask({
+                                  ...newTask,
+                                  rotationMembers: [...newTask.rotationMembers, member.user_id],
+                                });
+                              } else {
+                                setNewTask({
+                                  ...newTask,
+                                  rotationMembers: newTask.rotationMembers.filter(
+                                    (id) => id !== member.user_id
+                                  ),
+                                });
+                              }
+                            }}
+                            trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
+                            thumbColor={
+                              newTask.rotationMembers.includes(member.user_id)
+                                ? theme.colors.primary
+                                : '#f4f3f4'
+                            }
+                          />
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={{ color: isDarkMode ? '#999' : '#666', marginTop: 4 }}>
+                        No home members found for rotation
+                      </Text>
+                    )}
+                  </>
+                )}
+              </View>
+
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Consequences for Missing Task
+              </Text>
+              <View style={styles.consequencesContainer}>
+                {[
+                  { value: 'none', label: 'None' },
+                  { value: 'double_next', label: 'Double Work Next Week' },
+                  { value: 'penalty_point', label: 'Penalty Point' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.consequenceOption,
+                      newTask.consequence === option.value && styles.activeConsequenceOption,
+                      {
+                        backgroundColor:
+                          newTask.consequence === option.value
+                            ? theme.colors.primary
+                            : 'rgba(150, 150, 150, 0.1)',
+                      },
+                    ]}
+                    onPress={() => setNewTask({ ...newTask, consequence: option.value })}
+                  >
+                    <Text
+                      style={[
+                        styles.consequenceText,
+                        {
+                          color:
+                            newTask.consequence === option.value
+                              ? '#fff'
+                              : isDarkMode
+                              ? '#999'
+                              : '#666',
+                        },
                       ]}
                     >
-                      {person}
+                      {option.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={styles.rotationToggleContainer}>
-                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Enable Rotation</Text>
-                <Switch
-                  value={newTask.rotationEnabled}
-                  onValueChange={(value) => setNewTask({...newTask, rotationEnabled: value})}
-                  trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
-                  thumbColor={newTask.rotationEnabled ? theme.colors.primary : '#f4f3f4'}
-                />
-              </View>
-              {newTask.rotationEnabled && (
-                <View style={styles.rotationMembersContainer}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rotation Members</Text>
-                  {['You', 'Alex', 'Jordan'].map((person) => (
-                    <View key={person} style={styles.rotationMemberRow}>
-                      <Text style={{color: theme.colors.text}}>{person}</Text>
-                      <Switch
-                        value={newTask.rotationMembers.includes(person)}
-                        onValueChange={(value) => {
-                          if (value) {
-                            setNewTask({...newTask, rotationMembers: [...newTask.rotationMembers, person]});
-                          } else {
-                            setNewTask({
-                              ...newTask, 
-                              rotationMembers: newTask.rotationMembers.filter(p => p !== person)
-                            });
-                          }
-                        }}
-                        trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
-                        thumbColor={newTask.rotationMembers.includes(person) ? theme.colors.primary : '#f4f3f4'}
-                      />
-                    </View>
-                  ))}
-                </View>
-              )}
             </ScrollView>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalActionButton, styles.cancelButton]}
@@ -1306,7 +1459,11 @@ const TasksScheduleScreen: React.FC = () => {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalActionButton, styles.confirmButton, !newTask.title && styles.disabledButton]}
+                style={[
+                  styles.modalActionButton,
+                  styles.confirmButton,
+                  !newTask.title && styles.disabledButton,
+                ]}
                 onPress={handleCreateTask}
                 disabled={!newTask.title}
               >
@@ -1319,186 +1476,113 @@ const TasksScheduleScreen: React.FC = () => {
     );
   };
 
-  // Render the New Rule Modal
-  const renderNewRuleModal = () => {
-    return (
-      <Modal
-        visible={showNewRuleModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowNewRuleModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                Create House Rule
-              </Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowNewRuleModal(false)}
-              >
-                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScrollContent}>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
-              <TextInput
-                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter rule title"
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
-                value={newRule.title}
-                onChangeText={(text) => setNewRule({...newRule, title: text})}
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
-              <TextInput
-                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter rule description"
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
-                value={newRule.description}
-                onChangeText={(text) => setNewRule({...newRule, description: text})}
-                multiline
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
-              <View style={styles.ruleCategoriesSelection}>
-                {RULE_CATEGORIES.map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.ruleCategoryOption,
-                      newRule.category === category.id && { backgroundColor: category.color + '20', borderColor: category.color }
-                    ]}
-                    onPress={() => setNewRule({...newRule, category: category.id})}
-                  >
-                    <Ionicons
-                      name={category.icon}
-                      size={20}
-                      color={category.color}
-                      style={styles.ruleCategoryIcon}
-                    />
-                    <Text 
-                      style={[
-                        styles.ruleCategoryOptionText, 
-                        {color: newRule.category === category.id ? category.color : isDarkMode ? '#999' : '#666'}
-                      ]}
-                    >
-                      {category.id}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalActionButton, styles.cancelButton]}
-                onPress={() => setShowNewRuleModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalActionButton, 
-                  styles.confirmButton,
-                  (!newRule.title || !newRule.description) && styles.disabledButton
-                ]}
-                onPress={handleCreateRule}
-                disabled={!newRule.title || !newRule.description}
-              >
-                <Text style={styles.confirmButtonText}>Create Rule</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
+  const renderEvaluateTaskModal = () => {
+    if (!taskToEvaluate) return null;
 
-  // Render the Edit Rule Modal
-  const renderEditRuleModal = () => {
     return (
       <Modal
-        visible={showEditRuleModal}
+        visible={showEvaluateTaskModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowEditRuleModal(false)}
+        onRequestClose={() => setShowEvaluateTaskModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                Edit House Rule
+                Evaluate Task
               </Text>
               <TouchableOpacity
                 style={styles.modalCloseButton}
-                onPress={() => setShowEditRuleModal(false)}
+                onPress={() => setShowEvaluateTaskModal(false)}
               >
                 <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
               </TouchableOpacity>
             </View>
+
             <ScrollView style={styles.modalScrollContent}>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
-              <TextInput
-                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter rule title"
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
-                value={editedRule.title}
-                onChangeText={(text) => setEditedRule(prev => ({...prev, title: text}))}
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
-              <TextInput
-                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
-                placeholder="Enter rule description"
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
-                value={editedRule.description}
-                onChangeText={(text) => setEditedRule(prev => ({...prev, description: text}))}
-                multiline
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
-              <View style={styles.ruleCategoriesSelection}>
-                {RULE_CATEGORIES.map((category) => (
+              <View style={styles.evaluateTaskInfo}>
+                <Text style={[styles.evaluateTaskTitle, { color: theme.colors.text }]}>
+                  {taskToEvaluate.title}
+                </Text>
+                <Text style={styles.evaluateTaskSubtitle}>
+                  Completed by {taskToEvaluate.completion_history?.[0]?.completed_by_name || 'Unknown'}
+                </Text>
+              </View>
+
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                How well was this task done?
+              </Text>
+
+              <View style={styles.evaluationOptions}>
+                {EVALUATION_OPTIONS.map((option) => (
                   <TouchableOpacity
-                    key={category.id}
+                    key={option.value}
                     style={[
-                      styles.ruleCategoryOption,
-                      editedRule.category === category.id && { backgroundColor: category.color + '20', borderColor: category.color }
+                      styles.evaluationOption,
+                      evaluationRating === option.value && {
+                        backgroundColor: option.color + '20',
+                        borderColor: option.color,
+                      },
                     ]}
-                    onPress={() => setEditedRule(prev => ({...prev, category: category.id}))}
+                    onPress={() => setEvaluationRating(option.value)}
                   >
                     <Ionicons
-                      name={category.icon}
-                      size={20}
-                      color={category.color}
-                      style={styles.ruleCategoryIcon}
+                      name={option.icon}
+                      size={24}
+                      color={evaluationRating === option.value ? option.color : '#999'}
                     />
-                    <Text 
+                    <Text
                       style={[
-                        styles.ruleCategoryOptionText, 
-                        {color: editedRule.category === category.id ? category.color : isDarkMode ? '#999' : '#666'}
+                        styles.evaluationOptionText,
+                        evaluationRating === option.value && {
+                          color: option.color,
+                          fontWeight: '600',
+                        },
                       ]}
                     >
-                      {category.id}
+                      {option.label}
                     </Text>
+                    {option.penalty && (
+                      <Text
+                        style={[
+                          styles.penaltyText,
+                          { color: option.color },
+                        ]}
+                      >
+                        {option.penalty} pt{option.penalty !== 1 ? 's' : ''}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Notes (Optional)</Text>
+              <TextInput
+                style={[
+                  styles.textAreaInput,
+                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
+                ]}
+                placeholder="Provide feedback about the task"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={evaluationNotes}
+                onChangeText={setEvaluationNotes}
+                multiline
+              />
             </ScrollView>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalActionButton, styles.cancelButton]}
-                onPress={() => setShowEditRuleModal(false)}
+                onPress={() => setShowEvaluateTaskModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.modalActionButton, 
-                  styles.confirmButton,
-                  (!editedRule.title || !editedRule.description) && styles.disabledButton
-                ]}
-                onPress={handleEditRule}
-                disabled={!editedRule.title || !editedRule.description}
+                style={[styles.modalActionButton, styles.confirmButton]}
+                onPress={submitTaskEvaluation}
               >
-                <Text style={styles.confirmButtonText}>Update Rule</Text>
+                <Text style={styles.confirmButtonText}>Submit Evaluation</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1529,8 +1613,8 @@ const TasksScheduleScreen: React.FC = () => {
           contextMode="home"
           data={{
             expenses: [],
-            tasks: MOCK_TASKS,
-            events: MOCK_EVENTS,
+            tasks,
+            events: [],
             furniture: [],
           }}
         />
@@ -1571,20 +1655,16 @@ const TasksScheduleScreen: React.FC = () => {
         >
           <View>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              {activeTab === 'tasks' ? 'Tasks & Schedule' : 'House Rules'}
+              Chores & Rules
             </Text>
             <Text style={styles.headerSubtitle}>
-              {activeTab === 'tasks' 
-                ? 'Manage your household tasks and schedule'
-                : 'Establish and manage house rules'}
+              Manage household tasks and rules
             </Text>
           </View>
-          {MOCK_PENALTY_POINTS['You'] > 0 && (
+          {calculatePenaltyPoints() > 0 && (
             <View style={styles.penaltyBadge}>
               <Ionicons name="alert-circle" size={16} color="#EB4D4B" />
-              <Text style={styles.penaltyText}>
-                {MOCK_PENALTY_POINTS['You']} Penalty {MOCK_PENALTY_POINTS['You'] === 1 ? 'Point' : 'Points'}
-              </Text>
+              <Text style={styles.penaltyText}>{calculatePenaltyPoints()} penalty points</Text>
             </View>
           )}
         </Animated.View>
@@ -1593,12 +1673,12 @@ const TasksScheduleScreen: React.FC = () => {
             style={[
               styles.tabButton,
               activeTab === 'tasks' && styles.activeTabButton,
-              { borderBottomColor: activeTab === 'tasks' ? theme.colors.primary : 'transparent' }
+              { borderBottomColor: activeTab === 'tasks' ? theme.colors.primary : 'transparent' },
             ]}
             onPress={() => setActiveTab('tasks')}
           >
             <Ionicons
-              name="calendar-outline"
+              name="checkbox-outline"
               size={22}
               color={activeTab === 'tasks' ? theme.colors.primary : '#999'}
             />
@@ -1607,18 +1687,18 @@ const TasksScheduleScreen: React.FC = () => {
                 styles.tabButtonText,
                 {
                   color: activeTab === 'tasks' ? theme.colors.primary : '#999',
-                  fontWeight: activeTab === 'tasks' ? '600' : '400'
-                }
+                  fontWeight: activeTab === 'tasks' ? '600' : '400',
+                },
               ]}
             >
-              Tasks & Schedule
+              Chores
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.tabButton,
               activeTab === 'rules' && styles.activeTabButton,
-              { borderBottomColor: activeTab === 'rules' ? theme.colors.primary : 'transparent' }
+              { borderBottomColor: activeTab === 'rules' ? theme.colors.primary : 'transparent' },
             ]}
             onPress={() => setActiveTab('rules')}
           >
@@ -1632,8 +1712,8 @@ const TasksScheduleScreen: React.FC = () => {
                 styles.tabButtonText,
                 {
                   color: activeTab === 'rules' ? theme.colors.primary : '#999',
-                  fontWeight: activeTab === 'rules' ? '600' : '400'
-                }
+                  fontWeight: activeTab === 'rules' ? '600' : '400',
+                },
               ]}
             >
               Rules
@@ -1660,8 +1740,7 @@ const TasksScheduleScreen: React.FC = () => {
         </Animated.View>
       </ScrollView>
       {renderNewTaskModal()}
-      {renderNewRuleModal()}
-      {renderEditRuleModal()}
+      {renderEvaluateTaskModal()}
     </View>
   );
 };
@@ -1769,6 +1848,11 @@ const styles = StyleSheet.create({
   taskListContainer: {
     marginBottom: 20,
   },
+  loadingText: {
+    textAlign: 'center',
+    padding: 20,
+    color: '#999',
+  },
   taskCard: {
     borderRadius: 16,
     padding: 16,
@@ -1804,20 +1888,20 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: '#999',
   },
-  taskDueDate: {
+  taskDescription: {
     fontSize: 13,
     color: '#999',
+    marginTop: 2,
   },
   taskAssigneeContainer: {
     marginLeft: 8,
+    alignItems: 'center',
   },
-  taskAssignee: {
-    fontSize: 14,
+  assigneeName: {
+    fontSize: 12,
     fontWeight: '500',
-  },
-  myTaskLabel: {
-    color: '#546DE5',
-    fontWeight: '700',
+    marginTop: 4,
+    textAlign: 'center',
   },
   taskActions: {
     flexDirection: 'row',
@@ -1876,7 +1960,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
   seeAllText: {
@@ -1942,27 +2026,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#fff',
   },
-  noSwapRequestsText: {
-    fontSize: 14,
-    color: '#999',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  preferencesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  preferencesButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
   emptyStateContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1979,119 +2042,153 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
   },
-  calendarContainer: {
-    marginBottom: 20,
-  },
-  calendarPlaceholder: {
-    height: 80,
-    marginBottom: 16,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderRadius: 12,
-    padding: 10,
-    alignItems: 'center',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-  },
-  placeholderText: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  daysRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  dayButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
+    padding: 20,
   },
-  dayButtonText: {
-    fontSize: 12,
-    color: '#999',
-  },
-  selectedDateEventsContainer: {
-    marginBottom: 24,
-  },
-  eventCard: {
-    borderRadius: 16,
-    marginBottom: 12,
-    overflow: 'hidden',
-    flexDirection: 'row',
+  modalContent: {
+    width: '95%',
+    maxHeight: '80%',
+    borderRadius: 20,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
   },
-  eventColorIndicator: {
-    width: 6,
-  },
-  eventContent: {
-    flex: 1,
-    padding: 16,
-  },
-  eventHeader: {
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 15,
   },
-  eventTitle: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: '600',
-    flex: 1,
   },
-  recurringBadge: {
+  modalCloseButton: {
+    padding: 5,
+  },
+  modalScrollContent: {
+    maxHeight: 450,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 15,
+    marginBottom: 6,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  textAreaInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  categoryOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  activeCategoryOption: {
+    backgroundColor: 'rgba(84, 109, 229, 0.2)',
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  assigneeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  assigneeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(84, 109, 229, 0.1)',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  activeAssigneeOption: {
+    backgroundColor: '#546DE5',
+  },
+  assigneeOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
     marginLeft: 8,
   },
-  recurringText: {
-    fontSize: 10,
-    color: '#546DE5',
-    marginLeft: 3,
-  },
-  eventDetails: {
-    marginBottom: 8,
-  },
-  eventDetailItem: {
+  rotationToggleContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginVertical: 15,
   },
-  eventDetailText: {
-    fontSize: 13,
-    color: '#999',
-    marginLeft: 6,
+  rotationMembersContainer: {
+    marginVertical: 8,
   },
-  eventDescription: {
-    fontSize: 14,
-    color: '#777',
-    marginBottom: 8,
+  rotationMemberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
   },
-  attendeesContainer: {
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderRadius: 8,
-    padding: 10,
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
   },
-  attendeesLabel: {
-    fontSize: 12,
+  modalActionButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(150, 150, 150, 0.2)',
+    marginRight: 10,
+  },
+  confirmButton: {
+    backgroundColor: '#546DE5',
+    marginLeft: 10,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  cancelButtonText: {
+    fontSize: 16,
     fontWeight: '500',
-    color: '#777',
-    marginBottom: 4,
+    color: '#666',
   },
-  attendeesList: {
-    fontSize: 13,
-    color: '#555',
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'white',
   },
   ruleCategoriesContainer: {
     flexDirection: 'row',
@@ -2114,34 +2211,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     marginLeft: 4,
-  },
-  rulesSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: 16,
-  },
-  ruleSummaryCard: {
-    width: '31%',
-    height: 70,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  ruleSummaryNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#546DE5',
-    marginBottom: 4,
-  },
-  ruleSummaryLabel: {
-    fontSize: 11,
-    color: '#999',
-    textAlign: 'center',
   },
   ruleListContainer: {
     marginBottom: 20,
@@ -2314,173 +2383,223 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 8,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  weeklyCalendarContainer: {
+    marginBottom: 20,
   },
-  modalContent: {
-    width: '95%',
-    maxHeight: '80%',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  modalCloseButton: {
-    padding: 5,
-  },
-  modalScrollContent: {
-    maxHeight: 450,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 15,
-    marginBottom: 6,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
-  },
-  textAreaInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 8,
-  },
-  categoryOption: {
+  calendarList: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+  },
+  dayCard: {
+    width: 60,
+    height: 80,
     marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  activeCategoryOption: {
-    backgroundColor: 'rgba(84, 109, 229, 0.2)',
-  },
-  categoryOptionText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  assigneeContainer: {
-    flexDirection: 'row',
-    marginVertical: 8,
-  },
-  assigneeOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  activeAssigneeOption: {
-    backgroundColor: '#546DE5',
-  },
-  assigneeOptionText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  rotationToggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderRadius: 12,
     alignItems: 'center',
-    marginVertical: 15,
+    justifyContent: 'center',
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  rotationMembersContainer: {
-    marginVertical: 8,
+  todayCard: {
+    borderWidth: 1,
+    borderColor: '#546DE5',
   },
-  rotationMemberRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+  selectedDayCard: {
+    shadowColor: '#546DE5',
+    shadowOpacity: 0.3,
+    elevation: 4,
   },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  modalActionButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: 'rgba(150, 150, 150, 0.2)',
-    marginRight: 10,
-  },
-  confirmButton: {
-    backgroundColor: '#546DE5',
-    marginLeft: 10,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  cancelButtonText: {
-    fontSize: 16,
+  dayName: {
+    fontSize: 12,
     fontWeight: '500',
+    color: '#999',
+    marginBottom: 5,
+  },
+  dayDate: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#666',
   },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: 'white',
+  taskCountBadge: {
+    position: 'absolute',
+    bottom: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#546DE5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  ruleCategoriesSelection: {
+  allTasksCountBadge: {
+    position: 'absolute',
+    bottom: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#bbb',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  selectedDayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  selectedDayText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  addTaskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  addTaskText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#fff',
+    marginLeft: 4,
+  },
+  taskHeaderBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 6,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
+  categoryColorIndicator: {
+    height: 6,
+    width: '100%',
+  },
+  categoryScrollView: {
+    marginVertical: 10,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  rotationSection: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  frequencyContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginVertical: 8,
   },
-  ruleCategoryOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  frequencyOption: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 16,
+    borderRadius: 20,
     marginRight: 8,
     marginBottom: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderWidth: 1,
-    borderColor: 'transparent',
   },
-  ruleCategoryIcon: {
-    marginRight: 4,
+  activeFrequencyOption: {
+    backgroundColor: '#546DE5',
   },
-  ruleCategoryOptionText: {
+  frequencyOptionText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  rotationMemberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  consequencesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  consequenceOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  activeConsequenceOption: {
+    backgroundColor: '#546DE5',
+  },
+  consequenceText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  evaluateTaskInfo: {
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    borderRadius: 8,
+  },
+  evaluateTaskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  evaluateTaskSubtitle: {
+    fontSize: 14,
+    color: '#999',
+  },
+  evaluationOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 10,
+    justifyContent: 'space-between',
+  },
+  evaluationOption: {
+    width: '48%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(150, 150, 150, 0.2)',
+  },
+  evaluationOptionText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
+  },
+  penaltyText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  consequenceToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: 'rgba(235, 77, 75, 0.1)',
+    borderRadius: 8,
   },
 });
 
-export default TasksScheduleScreen;
+export default TasksScreen;

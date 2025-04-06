@@ -4,6 +4,7 @@ import * as notificationService from '../services/api/notificationService';
 import { Notification } from '../services/api/notificationService';
 import { supabase } from '../config/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 export const useNotifications = (homeId?: string) => {
   const { user } = useAuth();
@@ -14,6 +15,8 @@ export const useNotifications = (homeId?: string) => {
   
   // Reference to the realtime subscription
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
+  // Track the last seen notification to prevent duplicates
+  const lastSeenNotificationRef = useRef<string | null>(null);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async (limit: number = 20, offset: number = 0) => {
@@ -24,6 +27,12 @@ export const useNotifications = (homeId?: string) => {
     setLoading(true);
     try {
       const data = await notificationService.getUserNotifications(user.id, homeId, limit, offset);
+      
+      // Update the last seen notification ID if we have notifications
+      if (data.length > 0) {
+        lastSeenNotificationRef.current = data[0].id;
+      }
+      
       setNotifications(data);
       setError(null);
     } catch (err: any) {
@@ -86,20 +95,57 @@ export const useNotifications = (homeId?: string) => {
     }
   }, [user, homeId]);
   
-  // Set up realtime subscription
+  // Handle a new notification
+  const handleNewNotification = useCallback((newNotification: Notification) => {
+    // Only process if it's for this user or all users (null user_id)
+    if (
+      (newNotification.user_id === user?.id || newNotification.user_id === null) &&
+      // Prevent duplicate notifications by checking against last seen ID
+      newNotification.id !== lastSeenNotificationRef.current
+    ) {
+      console.log(`Processing notification: ${newNotification.id} - ${newNotification.title}`);
+      
+      // Update last seen ID
+      lastSeenNotificationRef.current = newNotification.id;
+      
+      // Add to the list
+      setNotifications(prev => {
+        // Check if this notification already exists to avoid duplicates
+        const exists = prev.some(n => n.id === newNotification.id);
+        if (exists) {
+          return prev;
+        }
+        return [newNotification, ...prev];
+      });
+      
+      // Update unread count if needed
+      if (!newNotification.is_read) {
+        setUnreadCount(prev => prev + 1);
+      }
+      
+      return true;
+    }
+    return false;
+  }, [user]);
+  
+  // Set up realtime subscription with improved error handling
   useEffect(() => {
     if (!user?.id || !homeId) {
       return;
     }
     
+    console.log(`Setting up notification subscription for homeId: ${homeId} and userId: ${user.id}`);
+    
     // Clean up any existing subscription
     if (subscriptionRef.current) {
       subscriptionRef.current.unsubscribe();
+      subscriptionRef.current = null;
     }
     
-    // Create a new subscription for notifications table
+    // Create a new subscription with more detailed filter
+    const channelName = `notifications-${Platform.OS}-${Date.now()}`;
     const subscription = supabase
-      .channel('notifications-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -109,19 +155,12 @@ export const useNotifications = (homeId?: string) => {
           filter: `home_id=eq.${homeId}` // Filter for this specific home
         },
         (payload) => {
-          console.log('Real-time notification update:', payload);
+          console.log(`Realtime notification received on ${Platform.OS}:`, payload);
           
           // Handle different event types
           if (payload.eventType === 'INSERT') {
             const newNotification = payload.new as Notification;
-            
-            // Only add if it's for this user or for all users (null user_id)
-            if (newNotification.user_id === user.id || newNotification.user_id === null) {
-              setNotifications(prev => [newNotification, ...prev]);
-              if (!newNotification.is_read) {
-                setUnreadCount(prev => prev + 1);
-              }
-            }
+            handleNewNotification(newNotification);
           } 
           else if (payload.eventType === 'UPDATE') {
             const updatedNotification = payload.new as Notification;
@@ -138,7 +177,9 @@ export const useNotifications = (homeId?: string) => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Notification subscription status (${channelName}):`, status);
+      });
     
     // Store the subscription reference
     subscriptionRef.current = subscription;
@@ -147,14 +188,20 @@ export const useNotifications = (homeId?: string) => {
     fetchNotifications();
     fetchUnreadCount();
     
+    // Refresh data periodically as a backup mechanism
+    const refreshInterval = setInterval(() => {
+      fetchUnreadCount();
+    }, 30000); // Every 30 seconds
+    
     // Clean up subscription when component unmounts or homeId/user changes
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe();
         subscriptionRef.current = null;
       }
+      clearInterval(refreshInterval);
     };
-  }, [user, homeId, fetchNotifications, fetchUnreadCount]);
+  }, [user, homeId, fetchNotifications, fetchUnreadCount, handleNewNotification]);
   
   // Return everything needed by components
   return {
@@ -163,7 +210,7 @@ export const useNotifications = (homeId?: string) => {
     loading,
     error,
     fetchNotifications,
-    refreshNotifications: fetchNotifications, // Alias for consistency
+    refreshNotifications: fetchNotifications,
     markAsRead,
     markAllAsRead
   };

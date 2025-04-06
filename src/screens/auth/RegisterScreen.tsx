@@ -972,13 +972,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <DynamicIsland
-        visible={notification.visible}
-        title={notification.title}
-        message={notification.message}
-        type={notification.type}
-        onHide={() => setNotification(prev => ({ ...prev, visible: false }))}
-      />
+      
 
       <LinearGradient
         colors={['rgba(84, 109, 229, 0.08)', 'rgba(119, 139, 235, 0.03)']}
