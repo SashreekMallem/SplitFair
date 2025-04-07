@@ -88,6 +88,7 @@ export interface CreateTaskParams {
   rotation_enabled: boolean;
   repeat_frequency?: RepeatFrequency;
   rotation_members?: string[]; // Array of user IDs
+  time_slot?: string; // Add time slot for availability tracking
 }
 
 /**
@@ -247,7 +248,8 @@ export const createTask = async (
       difficulty: taskData.difficulty,
       estimated_minutes: taskData.estimated_minutes,
       rotation_enabled: taskData.rotation_enabled,
-      repeat_frequency: taskData.repeat_frequency
+      repeat_frequency: taskData.repeat_frequency,
+      time_slot: taskData.time_slot || 'morning', // Default to morning if not specified
     };
     
     const { data: task, error } = await supabase

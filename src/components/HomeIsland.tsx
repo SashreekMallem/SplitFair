@@ -9,7 +9,6 @@ import {
   Platform,
   PanResponder,
   LayoutChangeEvent,
-  Image,
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +18,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
 import { UserProfile } from '../services/api/userService';
 import { HomeDetails } from '../services/api/homeService';
-import { useNotifications } from '../hooks/useNotifications';
+import AvailabilityModal from './AvailabilityModal';
 
 const { width } = Dimensions.get('window');
 
@@ -56,7 +55,7 @@ type HomeIslandProps = {
   onActionPress: () => void;
   data?: any;
   navigation?: any; // Add navigation prop
-  contextMode?: 'home' | 'profile'; // Add context mode to change behavior
+  contextMode?: 'home' | 'profile' | 'schedule'; // Add context mode to change behavior
   profile?: UserProfile | null; // Profile data for profile context
   homeData?: HomeDetails | null; // Home data for profile context
   onBackPress?: () => void; // Add back press handler
@@ -89,6 +88,7 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
   const iconRotation = useRef(new Animated.Value(0)).current;
   const slideAnimation = useRef(new Animated.Value(0)).current;
   const pulseAnimation = useRef(new Animated.Value(1)).current;
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
 
   // Track content height for dynamic sizing
   const [contentHeight, setContentHeight] = useState(0);
@@ -251,6 +251,10 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
       duration: 300,
       useNativeDriver: true
     }).start();
+  };
+
+  const handleAvailabilityPress = () => {
+    setShowAvailabilityModal(true);
   };
 
   // Calculate dynamic expanded height based on content height
@@ -719,6 +723,33 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           </View>
         );
 
+      case 'schedule':
+        return (
+          <View style={styles.expandedContent} onLayout={onContentLayout}>
+            <View style={styles.richDataCard}>
+              <View style={styles.dataCardHeader}>
+                <Text style={[styles.dataCardTitle, { color: colors.text }]}>Schedule</Text>
+              </View>
+              <View style={styles.placeholderContent}>
+                <Text style={[styles.placeholderText, { color: `${colors.text}DD` }]}>
+                  {content.primaryText}
+                </Text>
+                <Text style={[styles.placeholderSubtext, { color: `${colors.text}99` }]}>
+                  {content.secondaryText}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.accent }]}
+              onPress={handleAvailabilityPress}
+            >
+              <Text style={styles.actionButtonText}>My Availability</Text>
+              <Ionicons name="time" size={16} color="#fff" style={styles.actionButtonIcon} />
+            </TouchableOpacity>
+          </View>
+        );
+
       default:
         return (
           <View style={styles.expandedContent} onLayout={onContentLayout}>
@@ -906,6 +937,12 @@ const HomeIsland: React.FC<HomeIslandProps> = ({
           )}
         </BlurView>
       </LinearGradient>
+
+      {/* Availability Modal */}
+      <AvailabilityModal
+        visible={showAvailabilityModal}
+        onClose={() => setShowAvailabilityModal(false)}
+      />
     </Animated.View>
   );
 };
