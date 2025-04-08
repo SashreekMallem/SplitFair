@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,12 @@ import { HouseRule } from '../../services/api/houseRulesService';
 import { createStableKey } from '../../utils/keyHelper';
 import useTasks from '../../hooks/useTasks';
 import UserAvatar from '../../components/common/UserAvatar';
+import { 
+  isUserAvailableAt, 
+  getUserAvailability, 
+  getTeamAvailability, 
+  UserAvailability 
+} from '../../services/api/availabilityService';
 
 const RULE_CATEGORIES = [
   { id: 'Noise', color: '#9F71ED', icon: 'volume-high-outline' },
@@ -106,6 +112,9 @@ const TasksScreen: React.FC = () => {
 
   const homeId = user?.user_metadata?.home_id || '';
 
+  const [membersAvailability, setMembersAvailability] = useState<Record<string, UserAvailability>>({});
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
   useEffect(() => {
     // Intentionally empty after removing debug code
   }, [homeId, user]);
@@ -149,14 +158,12 @@ const TasksScreen: React.FC = () => {
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
-    dueDate: new Date().toISOString().split('T')[0],
-    category: 'cleaning',
-    assignedTo: user?.id || '',
-    icon: 'sparkles-outline',
+    day_of_week: 'mon',
+    time_slot: 'morning',
+    assigned_to: [] as string[],
     rotationEnabled: false,
-    rotationMembers: [user?.id || ''],
+    rotationMembers: [] as string[],
     rotationFrequency: 'weekly',
-    consequence: 'none',
   });
 
   const [newRule, setNewRule] = useState({
@@ -227,46 +234,91 @@ const TasksScreen: React.FC = () => {
     }
   };
 
+  const fetchMembersAvailability = useCallback(async () => {
+    if (!members || members.length === 0) return;
+
+    setLoadingAvailability(true);
+    try {
+      const userIds = members.map(member => member.user_id);
+      const availability = await getTeamAvailability(userIds);
+      console.log('Fetched availability data:', availability);
+      setMembersAvailability(availability);
+    } catch (error) {
+      console.error('Error fetching members availability:', error);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  }, [members]);
+
+  const isMemberAvailable = (userId: string, dayOfWeek: string, timeSlot: string): boolean => {
+    const availability = membersAvailability[userId];
+    return isUserAvailableAt(availability, dayOfWeek, timeSlot);
+  };
+
+  useEffect(() => {
+    if (showNewTaskModal && members && members.length > 0) {
+      fetchMembersAvailability();
+    }
+  }, [showNewTaskModal, members, fetchMembersAvailability]);
+
   const handleCreateTask = async () => {
     if (!newTask.title) {
-      showNotification('Error', 'Please provide a task title', 'error');
+      showNotification('Error', 'Please enter a task title', 'error');
       return;
     }
 
-    const categoryInfo = CHORE_CATEGORIES.find((cat) => cat.id === newTask.category);
-    const icon = categoryInfo ? categoryInfo.icon : 'checkmark-circle-outline';
+    if (newTask.assigned_to.length === 0) {
+      showNotification('Error', 'Please assign the task to at least one person', 'error');
+      return;
+    }
 
-    const taskData = {
-      title: newTask.title,
-      description: newTask.description,
-      due_date: newTask.dueDate,
-      category: newTask.category,
-      assigned_to: newTask.assignedTo,
-      icon: icon,
-      rotation_enabled: newTask.rotationEnabled,
-      rotation_members: newTask.rotationMembers,
-      repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
-      consequence: newTask.consequence,
-    };
+    const defaultCategory = 'other';
+    const defaultIcon = 'checkmark-circle-outline';
+
+    const dueDate = getDateFromDayOfWeek(newTask.day_of_week);
 
     try {
-      const result = await createTask(taskData);
-      if (result) {
-        setShowNewTaskModal(false);
-        setNewTask({
-          title: '',
-          description: '',
-          dueDate: new Date().toISOString().split('T')[0],
-          category: 'cleaning',
-          assignedTo: user?.id || '',
-          icon: 'sparkles-outline',
-          rotationEnabled: false,
-          rotationMembers: [user?.id || ''],
-          rotationFrequency: 'weekly',
-          consequence: 'none',
-        });
+      for (const assigneeId of newTask.assigned_to) {
+        const taskData = {
+          title: newTask.title,
+          description: newTask.description,
+          category: defaultCategory,
+          icon: defaultIcon,
+          due_date: dueDate,
+          day_of_week: newTask.day_of_week,
+          time_slot: newTask.time_slot,
+          assigned_to: assigneeId,
+          rotation_enabled: newTask.rotationEnabled,
+          rotation_members: newTask.rotationMembers.length > 0 
+            ? newTask.rotationMembers 
+            : undefined,
+          repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
+        };
+
+        await createTask(taskData);
       }
+
+      setShowNewTaskModal(false);
+      showNotification(
+        'Success', 
+        `Task${newTask.assigned_to.length > 1 ? 's' : ''} created successfully`, 
+        'success'
+      );
+
+      setNewTask({
+        title: '',
+        description: '',
+        day_of_week: 'mon',
+        time_slot: 'morning',
+        assigned_to: [],
+        rotationEnabled: false,
+        rotationMembers: [],
+        rotationFrequency: 'weekly',
+      });
+
+      refreshTasks();
     } catch (error) {
+      console.error('Error creating task:', error);
       showNotification('Error', 'Failed to create task', 'error');
     }
   };
@@ -558,7 +610,7 @@ const TasksScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.addTaskButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => {
-              setNewTask((prev) => ({ ...prev, dueDate: selectedDay }));
+              setNewTask((prev) => ({ ...prev, day_of_week: selectedDay }));
               setShowNewTaskModal(true);
             }}
           >
@@ -1189,266 +1241,204 @@ const TasksScreen: React.FC = () => {
                 multiline
               />
 
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Due Date</Text>
-              <TextInput
-                style={[
-                  styles.textInput,
-                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
-                ]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
-                value={newTask.dueDate}
-                onChangeText={(text) => setNewTask({ ...newTask, dueDate: text })}
-              />
-
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScrollView}>
-                {CHORE_CATEGORIES.map((category) => (
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Day of Week</Text>
+              <View style={styles.dayOfWeekContainer}>
+                {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => (
                   <TouchableOpacity
-                    key={category.id}
+                    key={day}
                     style={[
-                      styles.categoryChip,
-                      newTask.category === category.id && {
-                        backgroundColor: category.color + '30',
-                        borderColor: category.color,
-                      },
+                      styles.dayOption,
+                      newTask.day_of_week === day && styles.activeDayOption,
                     ]}
-                    onPress={() =>
-                      setNewTask({ ...newTask, category: category.id, icon: category.icon })
-                    }
+                    onPress={() => setNewTask({ ...newTask, day_of_week: day })}
                   >
-                    <Ionicons
-                      name={category.icon}
-                      size={18}
-                      color={
-                        newTask.category === category.id
-                          ? category.color
-                          : isDarkMode
-                          ? '#999'
-                          : '#666'
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        {
-                          color:
-                            newTask.category === category.id
-                              ? category.color
-                              : isDarkMode
-                              ? '#999'
-                              : '#666',
-                        },
-                      ]}
-                    >
-                      {category.name}
-                    </Text>
+                    <Text style={styles.dayOptionText}>{day.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
 
-              <Text style={[styles.inputLabel, { color: theme.colors.text, marginTop: 15 }]}>
-                Assigned To
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Time Slot</Text>
+              <View style={styles.timeSlotContainer}>
+                {['morning', 'afternoon', 'evening', 'night'].map((slot) => (
+                  <TouchableOpacity
+                    key={slot}
+                    style={[
+                      styles.timeSlotOption,
+                      newTask.time_slot === slot && styles.activeTimeSlotOption,
+                    ]}
+                    onPress={() => setNewTask({ ...newTask, time_slot: slot })}
+                  >
+                    <Text style={styles.timeSlotText}>{slot}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Assign To (Select multiple if needed)
               </Text>
               <View style={styles.assigneeContainer}>
-                {membersLoading ? (
-                  <Text style={{ color: isDarkMode ? '#999' : '#666' }}>
-                    Loading members...
-                  </Text>
-                ) : members && members.length > 0 ? (
-                  members.map((member) => (
+                {members.map((member) => {
+                  const isAvailable = isMemberAvailable(
+                    member.user_id,
+                    newTask.day_of_week,
+                    newTask.time_slot
+                  );
+
+                  const isSelected = newTask.assigned_to.includes(member.user_id);
+
+                  return (
                     <TouchableOpacity
                       key={member.user_id}
                       style={[
                         styles.assigneeOption,
-                        newTask.assignedTo === member.user_id && styles.activeAssigneeOption,
+                        isSelected && styles.activeAssigneeOption,
                         {
-                          backgroundColor:
-                            newTask.assignedTo === member.user_id
-                              ? theme.colors.primary
-                              : 'rgba(150, 150, 150, 0.1)',
+                          backgroundColor: isSelected
+                            ? '#546DE5'
+                            : isAvailable
+                            ? 'rgba(46, 175, 137, 0.15)'
+                            : 'rgba(150, 150, 150, 0.2)',
                         },
                       ]}
-                      onPress={() => setNewTask({ ...newTask, assignedTo: member.user_id })}
+                      onPress={() => {
+                        setNewTask((prev) => {
+                          const currentAssignees = [...prev.assigned_to];
+
+                          if (isSelected) {
+                            const index = currentAssignees.indexOf(member.user_id);
+                            if (index !== -1) currentAssignees.splice(index, 1);
+                          } else {
+                            currentAssignees.push(member.user_id);
+                          }
+
+                          return {
+                            ...prev,
+                            assigned_to: currentAssignees,
+                          };
+                        });
+                      }}
                     >
                       <UserAvatar
                         name={member.full_name}
-                        size={24}
+                        size={30}
                         isCurrentUser={member.user_id === user?.id}
-                        showBorder={newTask.assignedTo === member.user_id}
+                        showBorder={isSelected}
                       />
                       <Text
                         style={[
                           styles.assigneeOptionText,
                           {
-                            color:
-                              newTask.assignedTo === member.user_id
-                                ? '#fff'
-                                : isDarkMode
-                                ? '#999'
-                                : '#666',
+                            color: isSelected ? '#fff' : theme.colors.text,
+                            fontWeight: isAvailable ? '600' : '400',
                           },
                         ]}
                       >
                         {member.user_id === user?.id ? 'You' : member.full_name}
                       </Text>
                     </TouchableOpacity>
-                  ))
-                ) : (
-                  <View>
-                    <Text style={{ color: isDarkMode ? '#999' : '#666', marginBottom: 8 }}>
-                      No home members found
-                    </Text>
-                    <Text style={{ color: 'orange', fontSize: 12, marginBottom: 16 }}>
-                      This could be because you're not part of a home yet or there was an error loading your home data.
-                    </Text>
-                  </View>
-                )}
+                  );
+                })}
               </View>
 
-              <View style={styles.rotationSection}>
-                <View style={styles.rotationToggleContainer}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Enable Rotation</Text>
-                  <Switch
-                    value={newTask.rotationEnabled}
-                    onValueChange={(value) => setNewTask({ ...newTask, rotationEnabled: value })}
-                    trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
-                    thumbColor={newTask.rotationEnabled ? theme.colors.primary : '#f4f3f4'}
-                  />
-                </View>
+              <View style={styles.rotationToggleContainer}>
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Enable Rotation</Text>
+                <Switch
+                  value={newTask.rotationEnabled}
+                  onValueChange={(value) => setNewTask({ ...newTask, rotationEnabled: value })}
+                  trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
+                  thumbColor={newTask.rotationEnabled ? theme.colors.primary : '#f4f3f4'}
+                />
+              </View>
 
-                {newTask.rotationEnabled && (
-                  <>
-                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                      Rotation Frequency
-                    </Text>
-                    <View style={styles.frequencyContainer}>
-                      {['weekly', 'biweekly', 'monthly'].map((freq) => (
-                        <TouchableOpacity
-                          key={freq}
+              {newTask.rotationEnabled && (
+                <>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                    Rotation Frequency
+                  </Text>
+                  <View style={styles.frequencyContainer}>
+                    {['weekly', 'biweekly', 'monthly'].map((freq) => (
+                      <TouchableOpacity
+                        key={freq}
+                        style={[
+                          styles.frequencyOption,
+                          newTask.rotationFrequency === freq && styles.activeFrequencyOption,
+                          {
+                            backgroundColor:
+                              newTask.rotationFrequency === freq
+                                ? theme.colors.primary
+                                : 'rgba(150, 150, 150, 0.1)',
+                          },
+                        ]}
+                        onPress={() => setNewTask({ ...newTask, rotationFrequency: freq })}
+                      >
+                        <Text
                           style={[
-                            styles.frequencyOption,
-                            newTask.rotationFrequency === freq && styles.activeFrequencyOption,
+                            styles.frequencyOptionText,
                             {
-                              backgroundColor:
+                              color:
                                 newTask.rotationFrequency === freq
-                                  ? theme.colors.primary
-                                  : 'rgba(150, 150, 150, 0.1)',
+                                  ? '#fff'
+                                  : isDarkMode
+                                  ? '#999'
+                                  : '#666',
                             },
                           ]}
-                          onPress={() => setNewTask({ ...newTask, rotationFrequency: freq })}
                         >
-                          <Text
-                            style={[
-                              styles.frequencyOptionText,
-                              {
-                                color:
-                                  newTask.rotationFrequency === freq
-                                    ? '#fff'
-                                    : isDarkMode
-                                    ? '#999'
-                                    : '#666',
-                              },
-                            ]}
-                          >
-                            {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                          {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                      Rotation Members
-                    </Text>
-                    {members && members.length > 0 ? (
-                      members.map((member) => (
-                        <View key={member.user_id} style={styles.rotationMemberRow}>
-                          <View style={styles.rotationMemberInfo}>
-                            <UserAvatar
-                              name={member.full_name}
-                              size={24}
-                              isCurrentUser={member.user_id === user?.id}
-                            />
-                            <Text style={{ color: theme.colors.text, marginLeft: 8 }}>
-                              {member.user_id === user?.id ? 'You' : member.full_name}
-                            </Text>
-                          </View>
-                          <Switch
-                            value={newTask.rotationMembers.includes(member.user_id)}
-                            onValueChange={(value) => {
-                              if (value) {
-                                setNewTask({
-                                  ...newTask,
-                                  rotationMembers: [...newTask.rotationMembers, member.user_id],
-                                });
-                              } else {
-                                setNewTask({
-                                  ...newTask,
-                                  rotationMembers: newTask.rotationMembers.filter(
-                                    (id) => id !== member.user_id
-                                  ),
-                                });
-                              }
-                            }}
-                            trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
-                            thumbColor={
-                              newTask.rotationMembers.includes(member.user_id)
-                                ? theme.colors.primary
-                                : '#f4f3f4'
-                            }
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                    Rotation Members
+                  </Text>
+                  {members && members.length > 0 ? (
+                    members.map((member) => (
+                      <View key={member.user_id} style={styles.rotationMemberRow}>
+                        <View style={styles.rotationMemberInfo}>
+                          <UserAvatar
+                            name={member.full_name}
+                            size={24}
+                            isCurrentUser={member.user_id === user?.id}
                           />
+                          <Text style={{ color: theme.colors.text, marginLeft: 8 }}>
+                            {member.user_id === user?.id ? 'You' : member.full_name}
+                          </Text>
                         </View>
-                      ))
-                    ) : (
-                      <Text style={{ color: isDarkMode ? '#999' : '#666', marginTop: 4 }}>
-                        No home members found for rotation
-                      </Text>
-                    )}
-                  </>
-                )}
-              </View>
-
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                Consequences for Missing Task
-              </Text>
-              <View style={styles.consequencesContainer}>
-                {[
-                  { value: 'none', label: 'None' },
-                  { value: 'double_next', label: 'Double Work Next Week' },
-                  { value: 'penalty_point', label: 'Penalty Point' },
-                ].map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.consequenceOption,
-                      newTask.consequence === option.value && styles.activeConsequenceOption,
-                      {
-                        backgroundColor:
-                          newTask.consequence === option.value
-                            ? theme.colors.primary
-                            : 'rgba(150, 150, 150, 0.1)',
-                      },
-                    ]}
-                    onPress={() => setNewTask({ ...newTask, consequence: option.value })}
-                  >
-                    <Text
-                      style={[
-                        styles.consequenceText,
-                        {
-                          color:
-                            newTask.consequence === option.value
-                              ? '#fff'
-                              : isDarkMode
-                              ? '#999'
-                              : '#666',
-                        },
-                      ]}
-                    >
-                      {option.label}
+                        <Switch
+                          value={newTask.rotationMembers.includes(member.user_id)}
+                          onValueChange={(value) => {
+                            if (value) {
+                              setNewTask({
+                                ...newTask,
+                                rotationMembers: [...newTask.rotationMembers, member.user_id],
+                              });
+                            } else {
+                              setNewTask({
+                                ...newTask,
+                                rotationMembers: newTask.rotationMembers.filter(
+                                  (id) => id !== member.user_id
+                                ),
+                              });
+                            }
+                          }}
+                          trackColor={{ false: '#767577', true: theme.colors.primary + '70' }}
+                          thumbColor={
+                            newTask.rotationMembers.includes(member.user_id)
+                              ? theme.colors.primary
+                              : '#f4f3f4'
+                          }
+                        />
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={{ color: isDarkMode ? '#999' : '#666', marginTop: 4 }}>
+                      No home members found for rotation
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                  )}
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -1462,10 +1452,10 @@ const TasksScreen: React.FC = () => {
                 style={[
                   styles.modalActionButton,
                   styles.confirmButton,
-                  !newTask.title && styles.disabledButton,
+                  (!newTask.title.trim() || newTask.assigned_to.length === 0) && styles.disabledButton,
                 ]}
                 onPress={handleCreateTask}
-                disabled={!newTask.title}
+                disabled={!newTask.title.trim() || newTask.assigned_to.length === 0}
               >
                 <Text style={styles.confirmButtonText}>Create Task</Text>
               </TouchableOpacity>
@@ -2599,6 +2589,48 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: 'rgba(235, 77, 75, 0.1)',
     borderRadius: 8,
+  },
+  dayOfWeekContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  dayOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  activeDayOption: {
+    backgroundColor: '#546DE5',
+  },
+  dayOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  timeSlotContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  timeSlotOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  activeTimeSlotOption: {
+    backgroundColor: '#546DE5',
+  },
+  timeSlotText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
   },
 });
 

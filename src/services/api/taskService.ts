@@ -1,6 +1,5 @@
 import { supabase } from '../../config/supabase';
 import { createHomeNotification, createUserNotification } from './notificationService';
-
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'missed';
 export type TaskDifficulty = 'easy' | 'medium' | 'hard';
 export type RepeatFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
