@@ -263,13 +263,57 @@ const TasksScreen: React.FC = () => {
     }
   }, [showNewTaskModal, members, fetchMembersAvailability]);
 
+  // Add this helper function to handle both day name strings and full date strings
+  const getDateFromDayOfWeek = (dayInput: string): string => {
+    console.log("getDateFromDayOfWeek called with:", dayInput);
+    
+    // Check if the input is already a full date string (YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dayInput)) {
+      console.log("Input is already a date string, returning as is:", dayInput);
+      return dayInput;
+    }
+    
+    // Otherwise, treat it as a day of week abbreviation
+    const today = new Date();
+    const dayMap: {[key: string]: number} = {
+      'sun': 0, 'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4, 'fri': 5, 'sat': 6
+    };
+    
+    const targetDay = dayMap[dayInput.toLowerCase()];
+    if (targetDay === undefined) {
+      console.error("Invalid day of week format:", dayInput);
+      return new Date().toISOString().split('T')[0]; // Return today as fallback
+    }
+    
+    // Calculate the next occurrence of this day
+    const daysToAdd = (targetDay + 7 - today.getDay()) % 7;
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysToAdd);
+    
+    // Format as YYYY-MM-DD
+    const result = targetDate.toISOString().split('T')[0];
+    console.log("Calculated date:", result);
+    return result;
+  };
+
   const handleCreateTask = async () => {
+    console.log("handleCreateTask started", { 
+      title: newTask.title, 
+      description: newTask.description,
+      day_of_week: newTask.day_of_week,
+      time_slot: newTask.time_slot,
+      assigned_to: newTask.assigned_to,
+      rotationEnabled: newTask.rotationEnabled
+    });
+    
     if (!newTask.title) {
+      console.log("Error: Missing task title");
       showNotification('Error', 'Please enter a task title', 'error');
       return;
     }
 
     if (newTask.assigned_to.length === 0) {
+      console.log("Error: No assignees selected");
       showNotification('Error', 'Please assign the task to at least one person', 'error');
       return;
     }
@@ -277,9 +321,19 @@ const TasksScreen: React.FC = () => {
     const defaultCategory = 'other';
     const defaultIcon = 'checkmark-circle-outline';
 
+    console.log("Getting date from day of week:", newTask.day_of_week);
     const dueDate = getDateFromDayOfWeek(newTask.day_of_week);
+    console.log("Generated due date:", dueDate);
 
     try {
+      console.log(`Creating ${newTask.assigned_to.length} tasks for assignees:`, newTask.assigned_to);
+      
+      // Extract actual day of week from date for storage
+      const dateObj = new Date(dueDate);
+      const dayOfWeekNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const actualDayOfWeek = dayOfWeekNames[dateObj.getDay()];
+      console.log("Actual day of week:", actualDayOfWeek);
+      
       for (const assigneeId of newTask.assigned_to) {
         const taskData = {
           title: newTask.title,
@@ -287,7 +341,7 @@ const TasksScreen: React.FC = () => {
           category: defaultCategory,
           icon: defaultIcon,
           due_date: dueDate,
-          day_of_week: newTask.day_of_week,
+          day_of_week: actualDayOfWeek, // Store the actual day name
           time_slot: newTask.time_slot,
           assigned_to: assigneeId,
           rotation_enabled: newTask.rotationEnabled,
@@ -297,7 +351,9 @@ const TasksScreen: React.FC = () => {
           repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
         };
 
-        await createTask(taskData);
+        console.log(`Creating task for assignee ${assigneeId}:`, taskData);
+        const result = await createTask(taskData);
+        console.log("Task creation result:", result);
       }
 
       setShowNewTaskModal(false);
@@ -306,7 +362,8 @@ const TasksScreen: React.FC = () => {
         `Task${newTask.assigned_to.length > 1 ? 's' : ''} created successfully`, 
         'success'
       );
-
+      
+      console.log("Resetting task form data");
       setNewTask({
         title: '',
         description: '',
@@ -318,13 +375,18 @@ const TasksScreen: React.FC = () => {
         rotationFrequency: 'weekly',
       });
 
+      console.log("Refreshing tasks list");
       refreshTasks();
     } catch (error) {
       console.error('Error creating task:', error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       showNotification('Error', 'Failed to create task', 'error');
     }
   };
-
 
   const handleCreateRule = async () => {
     console.log("handleCreateRule started", { 
