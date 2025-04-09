@@ -237,38 +237,48 @@ export const useTasks = (initialHomeId?: string) => {
   // Create a new task
   const createTask = useCallback(async (taskData: CreateTaskParams) => {
     if (!user) {
+      showNotification('Error', 'You must be logged in to create tasks', 'error');
       return null;
     }
-    
+
     let targetHomeId = homeId;
-    
     if (!targetHomeId) {
-      targetHomeId = await fetchUserDefaultHome();
+      try {
+        const membership = await fetchUserHomeMembership(user.id);
+        if (membership && membership.home_id) {
+          targetHomeId = membership.home_id;
+        }
+      } catch (error) {
+        console.error('Error fetching home membership:', error);
+      }
     }
-    
+
     if (!targetHomeId) {
+      showNotification('Error', 'No home ID available', 'error');
       return null;
     }
-    
+
     try {
-      const newTask = await taskService.createTask(
+      // Make sure the assigned_to field is properly handled before passing to service
+      const task = await taskService.createTask(
         targetHomeId,
         user.id,
         taskData
       );
-      
-      if (newTask) {
-        // Refresh the task list to ensure we have the latest data
-        fetchTasks();
-        showNotification('Success', 'Task created successfully', 'success');
+
+      if (task) {
+        // Update the local tasks state with the new task
+        setTasks((prevTasks) => [task, ...prevTasks]);
+        return task;
       }
       
-      return newTask;
-    } catch (err: any) {
-      showNotification('Error', err.message || 'Failed to create task', 'error');
+      return null;
+    } catch (error) {
+      console.error('Error in createTask:', error);
+      showNotification('Error', 'Failed to create task', 'error');
       return null;
     }
-  }, [user, homeId, fetchUserDefaultHome, fetchTasks, showNotification]);
+  }, [user, homeId, showNotification]);
   
   // Complete a task
   const completeTask = useCallback(async (

@@ -345,7 +345,20 @@ export const createTask = async (
       dayOfWeek = dayOfWeekNames[dateObj.getDay()];
     }
     
-    // Create the task with a single assignee field or null if multiple assignees
+    // For multiple assignees, we'll set assigned_to to null
+    // For single assignee, we extract it from the array or use it directly
+    let singleAssignee = null;
+    if (!isMultipleAssignees) {
+      if (Array.isArray(taskData.assigned_to) && taskData.assigned_to.length === 1) {
+        singleAssignee = taskData.assigned_to[0];
+      } else if (typeof taskData.assigned_to === 'string') {
+        singleAssignee = taskData.assigned_to;
+      } else {
+        singleAssignee = userId; // Default to creator if no valid assignee
+      }
+    }
+    
+    // Create the task with correct assigned_to value (null for multiple, UUID for single)
     const newTask = {
       home_id: homeId,
       created_by: userId,
@@ -356,13 +369,13 @@ export const createTask = async (
       status: 'pending' as TaskStatus,
       due_date: dueDate,
       rotation_day: dayOfWeek,
-      assigned_to: isMultipleAssignees ? null : (taskData.assigned_to as string || userId), // Single assignee only
+      assigned_to: singleAssignee, // Now properly set to null or a single UUID string
       requires_multiple_people: isMultipleAssignees,
       difficulty: taskData.difficulty,
       estimated_minutes: taskData.estimated_minutes,
       rotation_enabled: taskData.rotation_enabled,
       repeat_frequency: taskData.repeat_frequency,
-      time_slot: taskData.time_slot || 'morning', // Default to morning if not specified
+      time_slot: taskData.time_slot || 'morning',
     };
     
     const { data: task, error } = await supabase
