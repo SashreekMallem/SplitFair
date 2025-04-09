@@ -25,7 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import HomeIsland, { IslandMode } from '../../components/HomeIsland';
 import useHouseRules from '../../hooks/useHouseRules';
 import useHomeMembers from '../../hooks/useHomeMembers';
-import { HouseRule } from '../../services/api/houseRulesService';
+import { HouseRule, RuleComment} from '../../services/api/houseRulesService';
 import { createStableKey } from '../../utils/keyHelper';
 import useTasks from '../../hooks/useTasks';
 import UserAvatar from '../../components/common/UserAvatar';
@@ -122,6 +122,7 @@ const TasksScreen: React.FC = () => {
   const {
     rules: houseRules,
     loading: rulesLoading,
+    error: rulesError,
     fetchRules: refreshRules,
     createRule,
     updateRule,
@@ -323,6 +324,57 @@ const TasksScreen: React.FC = () => {
     }
   };
 
+
+  const handleCreateRule = async () => {
+    if (!newRule.title || !newRule.description) {
+      showNotification('Error', 'Please fill in all required fields', 'error');
+      return;
+    }
+    
+    let targetHomeId = homeId;
+    
+    if (!targetHomeId && user?.id) {
+      try {
+        const membership = await fetchUserHomeMembership(user.id);
+        if (membership && membership.home_id) {
+          targetHomeId = membership.home_id;
+        } else {
+          showNotification('Error', 'You need to be a member of a home to create rules', 'error');
+          return;
+        }
+      } catch (error) {
+        showNotification('Error', 'Failed to verify home membership', 'error');
+        return;
+      }
+    }
+    
+    if (!targetHomeId) {
+      showNotification('Error', 'Home ID is missing. Cannot create rule.', 'error');
+      return;
+    }
+    
+    try {
+      const result = await createRule(
+        {
+          title: newRule.title,
+          description: newRule.description,
+          category: newRule.category
+        },
+        targetHomeId
+      );
+      
+      if (result) {
+        setShowNewRuleModal(false);
+        setNewRule({
+          title: '',
+          description: '',
+          category: 'Other'
+        });
+      }
+    } catch (error: any) {
+      showNotification('Error', `Failed to create rule: ${error.message}`, 'error');
+    }
+  };
   const handleRuleAgreement = async (ruleId: string) => {
     try {
       await toggleAgreement(ruleId);
@@ -923,6 +975,33 @@ const TasksScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        <View style={styles.rulesSummary}>
+          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={styles.ruleSummaryNumber}>
+              {houseRules.length}
+            </Text>
+            <Text style={styles.ruleSummaryLabel}>
+              Total Rules
+            </Text>
+          </View>
+          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={styles.ruleSummaryNumber}>
+              {user && houseRules.filter(rule => rule.agreements?.some(a => a.user_id === user.id)).length}
+            </Text>
+            <Text style={styles.ruleSummaryLabel}>
+              Rules You Agreed To
+            </Text>
+          </View>
+          <View style={[styles.ruleSummaryCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={styles.ruleSummaryNumber}>
+              {members.length > 0 && houseRules.filter(rule => rule.agreements && rule.agreements.length >= members.length).length}
+            </Text>
+            <Text style={styles.ruleSummaryLabel}>
+              Unanimous Rules
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.ruleListContainer}>
           {rulesLoading ? (
@@ -1581,6 +1660,191 @@ const TasksScreen: React.FC = () => {
     );
   };
 
+  const renderNewRuleModal = () => {
+    return (
+      <Modal
+        visible={showNewRuleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowNewRuleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Create House Rule
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowNewRuleModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollContent}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule title"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={newRule.title}
+                onChangeText={(text) => setNewRule({...newRule, title: text})}
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
+              <TextInput
+                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule description"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={newRule.description}
+                onChangeText={(text) => setNewRule({...newRule, description: text})}
+                multiline
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
+              <View style={styles.ruleCategoriesSelection}>
+                {RULE_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.ruleCategoryOption,
+                      newRule.category === category.id && { backgroundColor: category.color + '20', borderColor: category.color }
+                    ]}
+                    onPress={() => setNewRule({...newRule, category: category.id})}
+                  >
+                    <Ionicons
+                      name={category.icon}
+                      size={20}
+                      color={category.color}
+                      style={styles.ruleCategoryIcon}
+                    />
+                    <Text 
+                      style={[
+                        styles.ruleCategoryOptionText, 
+                        {color: newRule.category === category.id ? category.color : isDarkMode ? '#999' : '#666'}
+                      ]}
+                    >
+                      {category.id}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalActionButton, styles.cancelButton]}
+                onPress={() => setShowNewRuleModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionButton, 
+                  styles.confirmButton,
+                  (!newRule.title || !newRule.description) && styles.disabledButton
+                ]}
+                onPress={handleCreateRule}
+                disabled={!newRule.title || !newRule.description}
+              >
+                <Text style={styles.confirmButtonText}>Create Rule</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderEditRuleModal = () => {
+    return (
+      <Modal
+        visible={showEditRuleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditRuleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Edit House Rule
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowEditRuleModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollContent}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Rule Title *</Text>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule title"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={editedRule.title}
+                onChangeText={(text) => setEditedRule(prev => ({...prev, title: text}))}
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Description *</Text>
+              <TextInput
+                style={[styles.textAreaInput, { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' }]}
+                placeholder="Enter rule description"
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={editedRule.description}
+                onChangeText={(text) => setEditedRule(prev => ({...prev, description: text}))}
+                multiline
+              />
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
+              <View style={styles.ruleCategoriesSelection}>
+                {RULE_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.ruleCategoryOption,
+                      editedRule.category === category.id && { backgroundColor: category.color + '20', borderColor: category.color }
+                    ]}
+                    onPress={() => setEditedRule(prev => ({...prev, category: category.id}))}
+                  >
+                    <Ionicons
+                      name={category.icon}
+                      size={20}
+                      color={category.color}
+                      style={styles.ruleCategoryIcon}
+                    />
+                    <Text 
+                      style={[
+                        styles.ruleCategoryOptionText, 
+                        {color: editedRule.category === category.id ? category.color : isDarkMode ? '#999' : '#666'}
+                      ]}
+                    >
+                      {category.id}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalActionButton, styles.cancelButton]}
+                onPress={() => setShowEditRuleModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionButton, 
+                  styles.confirmButton,
+                  (!editedRule.title || !editedRule.description) && styles.disabledButton
+                ]}
+                onPress={handleEditRule}
+                disabled={!editedRule.title || !editedRule.description}
+              >
+                <Text style={styles.confirmButtonText}>Update Rule</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
@@ -1730,6 +1994,8 @@ const TasksScreen: React.FC = () => {
         </Animated.View>
       </ScrollView>
       {renderNewTaskModal()}
+      {renderNewRuleModal()}
+      {renderEditRuleModal()}
       {renderEvaluateTaskModal()}
     </View>
   );
@@ -2202,6 +2468,34 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 4,
   },
+  rulesSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 16,
+  },
+  ruleSummaryCard: {
+    width: '31%',
+    height: 70,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  ruleSummaryNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#546DE5',
+    marginBottom: 4,
+  },
+  ruleSummaryLabel: {
+    fontSize: 11,
+    color: '#999',
+    textAlign: 'center',
+  },
   ruleListContainer: {
     marginBottom: 20,
   },
@@ -2631,6 +2925,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#666',
+  },
+  ruleCategoriesSelection: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 8,
+  },
+  ruleCategoryOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  ruleCategoryIcon: {
+    marginRight: 4,
+  },
+  ruleCategoryOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
