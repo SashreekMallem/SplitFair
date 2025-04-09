@@ -35,6 +35,7 @@ import {
   getTeamAvailability, 
   UserAvailability 
 } from '../../services/api/availabilityService';
+import { fetchUserHomeMembership } from '../../services/api/homeService';
 
 const RULE_CATEGORIES = [
   { id: 'Noise', color: '#9F71ED', icon: 'volume-high-outline' },
@@ -326,34 +327,62 @@ const TasksScreen: React.FC = () => {
 
 
   const handleCreateRule = async () => {
+    console.log("handleCreateRule started", { 
+      title: newRule.title, 
+      description: newRule.description,
+      category: newRule.category
+    });
+    
     if (!newRule.title || !newRule.description) {
       showNotification('Error', 'Please fill in all required fields', 'error');
       return;
     }
     
     let targetHomeId = homeId;
+    console.log("Initial homeId:", homeId);
     
     if (!targetHomeId && user?.id) {
+      console.log("No home ID found, trying to fetch user home membership", user.id);
       try {
+        // Check if fetchUserHomeMembership is defined
+        if (typeof fetchUserHomeMembership !== 'function') {
+          console.error("fetchUserHomeMembership function is not defined!");
+          showNotification('Error', 'Internal function error: fetchUserHomeMembership not found', 'error');
+          return;
+        }
+        
         const membership = await fetchUserHomeMembership(user.id);
+        console.log("Fetched membership:", membership);
+        
         if (membership && membership.home_id) {
           targetHomeId = membership.home_id;
+          console.log("Found home ID from membership:", targetHomeId);
         } else {
+          console.log("No home ID in membership data", membership);
           showNotification('Error', 'You need to be a member of a home to create rules', 'error');
           return;
         }
       } catch (error) {
+        console.error("Error fetching user home membership:", error);
         showNotification('Error', 'Failed to verify home membership', 'error');
         return;
       }
     }
     
     if (!targetHomeId) {
+      console.error("No target home ID available after all checks");
       showNotification('Error', 'Home ID is missing. Cannot create rule.', 'error');
       return;
     }
     
+    console.log("Attempting to create rule with home ID:", targetHomeId);
     try {
+      console.log("Rule data to be sent:", {
+        title: newRule.title,
+        description: newRule.description,
+        category: newRule.category
+      });
+      
       const result = await createRule(
         {
           title: newRule.title,
@@ -362,6 +391,8 @@ const TasksScreen: React.FC = () => {
         },
         targetHomeId
       );
+      
+      console.log("Create rule result:", result);
       
       if (result) {
         setShowNewRuleModal(false);
@@ -372,9 +403,16 @@ const TasksScreen: React.FC = () => {
         });
       }
     } catch (error: any) {
+      console.error("Error creating rule:", error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       showNotification('Error', `Failed to create rule: ${error.message}`, 'error');
     }
   };
+
   const handleRuleAgreement = async (ruleId: string) => {
     try {
       await toggleAgreement(ruleId);
