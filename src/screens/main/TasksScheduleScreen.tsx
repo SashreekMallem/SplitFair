@@ -163,6 +163,7 @@ const TasksScreen: React.FC = () => {
     day_of_week: 'mon',
     time_slot: 'morning',
     assigned_to: [] as string[],
+    requires_multiple_people: false, // Flag to indicate multiple people requirement
     rotationEnabled: false,
     rotationMembers: [] as string[],
     rotationFrequency: 'weekly',
@@ -303,6 +304,7 @@ const TasksScreen: React.FC = () => {
       day_of_week: newTask.day_of_week,
       time_slot: newTask.time_slot,
       assigned_to: newTask.assigned_to,
+      requires_multiple_people: newTask.assigned_to.length > 1,
       rotationEnabled: newTask.rotationEnabled
     });
     
@@ -326,40 +328,42 @@ const TasksScreen: React.FC = () => {
     console.log("Generated due date:", dueDate);
 
     try {
-      console.log(`Creating ${newTask.assigned_to.length} tasks for assignees:`, newTask.assigned_to);
-      
       // Extract actual day of week from date for storage
       const dateObj = new Date(dueDate);
       const dayOfWeekNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
       const actualDayOfWeek = dayOfWeekNames[dateObj.getDay()];
       console.log("Actual day of week:", actualDayOfWeek);
       
-      for (const assigneeId of newTask.assigned_to) {
-        const taskData = {
-          title: newTask.title,
-          description: newTask.description,
-          category: defaultCategory,
-          icon: defaultIcon,
-          due_date: dueDate,
-          day_of_week: actualDayOfWeek, // Store the actual day name
-          time_slot: newTask.time_slot,
-          assigned_to: assigneeId,
-          rotation_enabled: newTask.rotationEnabled,
-          rotation_members: newTask.rotationMembers.length > 0 
-            ? newTask.rotationMembers 
-            : undefined,
-          repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
-        };
+      // Instead of creating separate tasks for each assignee, create one task with multiple assignees
+      const requiresMultiplePeople = newTask.assigned_to.length > 1;
+      
+      console.log(`Creating task with ${requiresMultiplePeople ? 'multiple required assignees' : 'single assignee'}`);
+      
+      const taskData = {
+        title: newTask.title,
+        description: newTask.description,
+        category: defaultCategory,
+        icon: defaultIcon,
+        due_date: dueDate,
+        day_of_week: actualDayOfWeek,
+        time_slot: newTask.time_slot,
+        assigned_to: newTask.assigned_to, // Now sending the whole array of assignees
+        requires_multiple_people: requiresMultiplePeople, // New field to indicate multiple people requirement
+        rotation_enabled: newTask.rotationEnabled,
+        rotation_members: newTask.rotationMembers.length > 0 
+          ? newTask.rotationMembers 
+          : undefined,
+        repeat_frequency: newTask.rotationEnabled ? newTask.rotationFrequency : undefined,
+      };
 
-        console.log(`Creating task for assignee ${assigneeId}:`, taskData);
-        const result = await createTask(taskData);
-        console.log("Task creation result:", result);
-      }
+      console.log("Creating task with data:", taskData);
+      const result = await createTask(taskData);
+      console.log("Task creation result:", result);
 
       setShowNewTaskModal(false);
       showNotification(
         'Success', 
-        `Task${newTask.assigned_to.length > 1 ? 's' : ''} created successfully`, 
+        'Task created successfully', 
         'success'
       );
       
@@ -370,6 +374,7 @@ const TasksScreen: React.FC = () => {
         day_of_week: 'mon',
         time_slot: 'morning',
         assigned_to: [],
+        requires_multiple_people: false,
         rotationEnabled: false,
         rotationMembers: [],
         rotationFrequency: 'weekly',
@@ -834,12 +839,28 @@ const TasksScreen: React.FC = () => {
   };
 
   const renderTaskItem = (task: any) => {
-    const isMyTask = task.assigned_to === user?.id;
+    // Modify to handle multiple assignees
+    const isMyTask = task.assigned_to && (
+      Array.isArray(task.assigned_to) 
+        ? task.assigned_to.includes(user?.id)
+        : task.assigned_to === user?.id
+    );
+    
     const isPending = task.status === 'pending';
     const isCompleted = task.status === 'completed';
 
-    const assignedMember = members.find((m) => m.user_id === task.assigned_to);
-    const assignedName = assignedMember ? assignedMember.full_name : 'Unknown';
+    // Get all assignee names if multiple
+    let assignedNames = '';
+    if (Array.isArray(task.assigned_to) && task.assigned_to.length > 1) {
+      assignedNames = task.assigned_to.map(id => {
+        const member = members.find(m => m.user_id === id);
+        return member ? (member.user_id === user?.id ? 'You' : member.full_name) : 'Unknown';
+      }).join(', ');
+    } else {
+      const assigneeId = Array.isArray(task.assigned_to) ? task.assigned_to[0] : task.assigned_to;
+      const assignedMember = members.find((m) => m.user_id === assigneeId);
+      assignedNames = assignedMember ? (assigneeId === user?.id ? 'You' : assignedMember.full_name) : 'Unknown';
+    }
 
     const categoryInfo =
       CHORE_CATEGORIES.find((cat) => cat.id === task.category) ||
@@ -896,7 +917,7 @@ const TasksScreen: React.FC = () => {
 
           <View style={styles.taskAssigneeContainer}>
             <UserAvatar
-              name={assignedName}
+              name={assignedNames}
               size={32}
               isCurrentUser={isMyTask}
               showBorder
@@ -908,10 +929,20 @@ const TasksScreen: React.FC = () => {
                 { color: isMyTask ? '#546DE5' : theme.colors.text },
               ]}
             >
-              {isMyTask ? 'You' : assignedName}
+              {assignedNames}
             </Text>
           </View>
         </View>
+
+        {/* Display "Requires multiple people" badge if applicable */}
+        {task.requires_multiple_people && (
+          <View style={styles.multipleRequiredBadge}>
+            <Ionicons name="people" size={14} color="#FF9855" />
+            <Text style={styles.multipleRequiredText}>
+              Requires {Array.isArray(task.assigned_to) ? task.assigned_to.length : 2} people
+            </Text>
+          </View>
+        )}
 
         {task.penalty_points && task.penalty_points > 0 && (
           <PenaltyStatusBadge points={task.penalty_points} />
@@ -1453,8 +1484,18 @@ const TasksScreen: React.FC = () => {
               </View>
 
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                Assign To (Select multiple if needed)
+                Assign To {newTask.assigned_to.length > 1 ? '(Multiple People Required)' : '(Select one or more)'}
               </Text>
+              
+              {newTask.assigned_to.length > 1 && (
+                <View style={styles.multipleAssigneeInfo}>
+                  <Ionicons name="information-circle-outline" size={16} color="#FF9855" />
+                  <Text style={styles.multipleAssigneeText}>
+                    Multiple assignees means this task requires {newTask.assigned_to.length} people to complete together
+                  </Text>
+                </View>
+              )}
+              
               <View style={styles.assigneeContainer}>
                 {members.map((member) => {
                   const isAvailable = isMemberAvailable(
@@ -1514,6 +1555,11 @@ const TasksScreen: React.FC = () => {
                       >
                         {member.user_id === user?.id ? 'You' : member.full_name}
                       </Text>
+                      {isSelected && (
+                        <View style={styles.assigneeSelectedBadge}>
+                          <Text style={styles.assigneeSelectedNumber}>{newTask.assigned_to.indexOf(member.user_id) + 1}</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -3026,28 +3072,52 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#666',
   },
-  ruleCategoriesSelection: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 8,
-  },
-  ruleCategoryOption: {
+  multipleAssigneeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 152, 85, 0.1)',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderRadius: 8,
+    marginBottom: 10,
   },
-  ruleCategoryIcon: {
-    marginRight: 4,
+  multipleAssigneeText: {
+    fontSize: 12,
+    color: '#FF9855',
+    marginLeft: 6,
+    flex: 1,
   },
-  ruleCategoryOptionText: {
-    fontSize: 14,
+  assigneeSelectedBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: 4,
+    right: 4,
+  },
+  assigneeSelectedNumber: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#546DE5',
+  },
+  multipleRequiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 152, 85, 0.1)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  multipleRequiredText: {
+    fontSize: 12,
+    color: '#FF9855',
+    marginLeft: 4,
     fontWeight: '500',
   },
 });
