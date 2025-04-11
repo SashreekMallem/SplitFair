@@ -104,7 +104,8 @@ export const fetchTasks = async (
       .select(`
         *,
         rotation_members:task_rotation_members(id, user_id, rotation_order),
-        completion_history:task_history(id, completed_by, completion_date, status, rating)
+        completion_history:task_history(id, completed_by, completion_date, status, rating),
+        task_assignees(id, user_id, assignment_order)
       `)
       .eq('home_id', homeId)
       .eq('is_active', true)
@@ -233,6 +234,35 @@ export const createTask = async (
   taskData: CreateTaskParams
 ): Promise<Task | null> => {
   try {
+    // Determine if this task requires multiple people
+    const isMultipleAssignees = Array.isArray(taskData.assigned_to) && taskData.assigned_to.length > 1;
+    
+    // Get due date from day of week if not provided
+    const dueDate = taskData.due_date || (typeof taskData.day_of_week === 'string' ? 
+      getDateFromDayOfWeek(taskData.day_of_week) : taskData.day_of_week);
+    
+    // If day_of_week is a full date (YYYY-MM-DD), extract the actual day of week
+    let dayOfWeek = taskData.day_of_week;
+    if (typeof dayOfWeek === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dayOfWeek)) {
+      const dateObj = new Date(dayOfWeek);
+      const dayOfWeekNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      dayOfWeek = dayOfWeekNames[dateObj.getDay()];
+    }
+    
+    // Handle the assigned_to field properly:
+    // - For multiple assignees, set assigned_to to null in the task record
+    // - For single assignee, extract it from the array or use it directly
+    let singleAssignee = null;
+    if (!isMultipleAssignees) {
+      if (Array.isArray(taskData.assigned_to) && taskData.assigned_to.length === 1) {
+        singleAssignee = taskData.assigned_to[0];
+      } else if (typeof taskData.assigned_to === 'string') {
+        singleAssignee = taskData.assigned_to;
+      } else {
+        singleAssignee = userId; // Default to creator if no valid assignee
+      }
+    }
+    
     // Create the task
     const newTask = {
       home_id: homeId,
@@ -242,14 +272,22 @@ export const createTask = async (
       category: taskData.category,
       icon: taskData.icon,
       status: 'pending' as TaskStatus,
-      due_date: taskData.due_date,
-      assigned_to: taskData.assigned_to || userId, // Default to creator if not specified
+      due_date: dueDate,
+      rotation_day: dayOfWeek,
+      assigned_to: singleAssignee, // Will be null for multiple assignees
+      requires_multiple_people: isMultipleAssignees,
       difficulty: taskData.difficulty,
       estimated_minutes: taskData.estimated_minutes,
       rotation_enabled: taskData.rotation_enabled,
       repeat_frequency: taskData.repeat_frequency,
       time_slot: taskData.time_slot || 'morning', // Default to morning if not specified
     };
+    
+    console.log("Creating task with properly formatted data:", {
+      ...newTask,
+      hasMultipleAssignees: isMultipleAssignees,
+      singleAssigneeValue: singleAssignee
+    });
     
     const { data: task, error } = await supabase
       .from('tasks')
@@ -262,20 +300,22 @@ export const createTask = async (
       return null;
     }
     
-    // If rotation enabled, add rotation members
-    if (taskData.rotation_enabled && taskData.rotation_members && taskData.rotation_members.length > 0) {
-      const rotationMembers = taskData.rotation_members.map((memberId, index) => ({
+    // If task requires multiple people, add entries to task_assignees
+    if (isMultipleAssignees && Array.isArray(taskData.assigned_to)) {
+      const assignees = taskData.assigned_to.map((memberId, index) => ({
         task_id: task.id,
         user_id: memberId,
-        rotation_order: index + 1
+        assignment_order: index + 1
       }));
       
-      const { error: rotationError } = await supabase
-        .from('task_rotation_members')
-        .insert(rotationMembers);
+      console.log("Adding multiple assignees to task_assignees table:", assignees);
       
-      if (rotationError) {
-        console.error('Error adding rotation members:', rotationError);
+      const { error: assigneeError } = await supabase
+        .from('task_assignees')
+        .insert(assignees);
+      
+      if (assigneeError) {
+        console.error('Error adding task assignees:', assigneeError);
       }
     }
     
@@ -299,9 +339,9 @@ export const createTask = async (
     );
     
     // If task is assigned to someone else, notify them
-    if (taskData.assigned_to && taskData.assigned_to !== userId) {
+    if (!isMultipleAssignees && singleAssignee && singleAssignee !== userId) {
       await createUserNotification(
-        taskData.assigned_to,
+        singleAssignee,
         homeId,
         'New Task Assigned',
         `${userName} assigned you a task: ${taskData.title}`,
@@ -309,11 +349,24 @@ export const createTask = async (
         'tasks',
         task.id
       );
+    } else if (isMultipleAssignees && Array.isArray(taskData.assigned_to)) {
+      // Notify each assignee except the creator
+      for (const assigneeId of taskData.assigned_to) {
+        if (assigneeId !== userId) {
+          await createUserNotification(
+            assigneeId,
+            homeId,
+            'New Task Assigned',
+            `${userName} assigned you to a group task: ${taskData.title}`,
+            'info',
+            'tasks',
+            task.id
+          );
+        }
+      }
     }
     
-    // Return the created task with enhanced info
-    const enhancedTasks = await enhanceTasksWithNames([task]);
-    return enhancedTasks[0] || task;
+    return task;
     
   } catch (error) {
     console.error('Unexpected error in createTask:', error);

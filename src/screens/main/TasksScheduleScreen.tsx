@@ -253,6 +253,83 @@ const TasksScreen: React.FC = () => {
     }
   }, [members]);
 
+  // Add the missing renderWeeklyCalendar function
+  const renderWeeklyCalendar = () => {
+    return (
+      <View style={styles.weeklyCalendarContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.calendarList}
+        >
+          {daysOfWeek.map((day) => {
+            const isSelected = selectedDay === day.dateStr;
+            
+            // Count tasks for this day
+            const dayTasks = tasks.filter(task => {
+              const taskDate = task.due_date ? task.due_date.split('T')[0] : '';
+              return taskDate === day.dateStr;
+            });
+            
+            // Count my tasks for this day
+            const myDayTasks = dayTasks.filter(task => {
+              if (Array.isArray(task.assigned_to)) {
+                return task.assigned_to.includes(user?.id);
+              } else if (task.assigned_to) {
+                return task.assigned_to === user?.id;
+              } else {
+                // Include tasks created by the user with null assigned_to
+                return task.created_by === user?.id;
+              }
+            });
+            
+            return (
+              <TouchableOpacity
+                key={day.dateStr}
+                onPress={() => setSelectedDay(day.dateStr)}
+                style={[
+                  styles.dayCard,
+                  { backgroundColor: theme.colors.card },
+                  day.isToday && styles.todayCard,
+                  isSelected && styles.selectedDayCard,
+                ]}
+              >
+                <Text 
+                  style={[
+                    styles.dayName, 
+                    isSelected && { color: theme.colors.primary },
+                  ]}
+                >
+                  {day.name}
+                </Text>
+                <Text 
+                  style={[
+                    styles.dayDate, 
+                    isSelected && { color: theme.colors.primary, fontWeight: '800' },
+                  ]}
+                >
+                  {day.date.getDate()}
+                </Text>
+                
+                {myDayTasks.length > 0 && (
+                  <View style={styles.taskCountBadge}>
+                    <Text style={styles.taskCountText}>{myDayTasks.length}</Text>
+                  </View>
+                )}
+                
+                {myDayTasks.length === 0 && dayTasks.length > 0 && (
+                  <View style={styles.allTasksCountBadge}>
+                    <Text style={styles.taskCountText}>{dayTasks.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
   const isMemberAvailable = (userId: string, dayOfWeek: string, timeSlot: string): boolean => {
     const availability = membersAvailability[userId];
     return isUserAvailableAt(availability, dayOfWeek, timeSlot);
@@ -638,136 +715,175 @@ const TasksScreen: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (tasks && tasks.length > 0) {
+      console.log("Tasks received from API:", tasks.length);
+      console.log("First task format sample:", JSON.stringify(tasks[0], null, 2));
+      console.log("Selected day:", selectedDay);
+    } else {
+      console.log("No tasks received from API or tasks array is empty");
+    }
+  }, [tasks, selectedDay]);
+
+  // Add a thorough debugging useEffect right before getFilteredTasks
+  useEffect(() => {
+    console.log("========== TASK DATA INSPECTION ==========");
+    console.log(`Tasks array length: ${tasks?.length || 0}`);
+    
+    if (tasks && tasks.length > 0) {
+      console.log("First task sample:", JSON.stringify({
+        id: tasks[0].id,
+        title: tasks[0].title,
+        assigned_to: tasks[0].assigned_to,
+        due_date: tasks[0].due_date,
+        status: tasks[0].status
+      }, null, 2));
+      
+      // Check assignment format patterns across all tasks
+      const assignmentFormats = tasks.map(task => {
+        return {
+          id: task.id.substring(0, 6),
+          isArray: Array.isArray(task.assigned_to),
+          value: task.assigned_to
+        };
+      });
+      console.log("Assignment formats:", JSON.stringify(assignmentFormats, null, 2));
+      
+      // Count tasks for current selected day
+      const tasksForSelectedDay = tasks.filter(task => {
+        const taskDate = task.due_date ? task.due_date.split('T')[0] : '';
+        return taskDate === selectedDay;
+      });
+      console.log(`Tasks matching selected day (${selectedDay}): ${tasksForSelectedDay.length}`);
+      
+      // Count tasks assigned to current user
+      const myTasks = tasks.filter(task => {
+        if (Array.isArray(task.assigned_to)) {
+          return task.assigned_to.includes(user?.id);
+        } else {
+          return task.assigned_to === user?.id;
+        }
+      });
+      console.log(`Tasks assigned to current user: ${myTasks.length}`);
+    } else {
+      console.log("No tasks available");
+    }
+    console.log("========================================");
+  }, [tasks, selectedDay, user?.id]);
+
   const getFilteredTasks = () => {
-    return tasks.filter((task) => {
-      const taskDate = task.due_date ? task.due_date.split('T')[0] : '';
-      const matchesSelectedDay = taskDate === selectedDay;
-
-      if (!matchesSelectedDay) return false;
-
+    console.log("--------- FILTERING TASKS ---------");
+    console.log(`Total tasks before filtering: ${tasks.length}`);
+    console.log(`Current filter mode: ${taskFilter}`);
+    console.log(`Current user ID: ${user?.id}`);
+    
+    // Create detailed debugging output
+    const filtered = tasks.filter((task) => {
+      console.log(`Task ID: ${task.id}, Title: ${task.title}, Due date: ${task.due_date}, assigned_to: ${JSON.stringify(task.assigned_to)}, requires_multiple: ${task.requires_multiple_people}, created_by: ${task.created_by}`);
+      
+      // Remove date filtering - we show all tasks regardless of date
+      
       if (taskFilter === 'mine') {
-        return task.assigned_to === user?.id;
+        // Check all possible ways a task can be assigned to the current user
+        
+        // Case 1: Direct array assignment
+        if (Array.isArray(task.assigned_to) && task.assigned_to.includes(user?.id)) {
+          console.log(`  user ${user?.id} is in the assigned_to array`);
+          return true;
+        }
+        
+        // Case 2: Single assignee
+        if (task.assigned_to === user?.id) {
+          console.log(`  user ${user?.id} is the single assignee`);
+          return true;
+        }
+        
+        // Case 3: Using task_assignees table for multi-person tasks
+        if (task.task_assignees && Array.isArray(task.task_assignees)) {
+          const isInTaskAssignees = task.task_assignees.some(
+            (assignee) => assignee.user_id === user?.id
+          );
+          
+          if (isInTaskAssignees) {
+            console.log(`  user ${user?.id} is in the task_assignees table`);
+            return true;
+          }
+        }
+        
+        // Case 4: For backwards compatibility - creator of a multi-person task
+        if (task.requires_multiple_people && task.created_by === user?.id && !task.assigned_to) {
+          console.log(`  user ${user?.id} is the creator of this multi-person task`);
+          return true;
+        }
+        
+        console.log(`  user ${user?.id} is not associated with this task`);
+        return false;
       }
+      
       if (taskFilter === 'upcoming') {
         const dueDate = new Date(task.due_date || '');
         const today = new Date();
         const inNextThreeDays =
           dueDate >= today &&
           dueDate <= new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+        console.log(`  is task upcoming (next 3 days)? ${inNextThreeDays}`);
         return inNextThreeDays;
       }
+      
+      console.log(`  task included in 'all' filter`);
       return true;
     });
+    
+    console.log(`Tasks after filtering: ${filtered.length}`);
+    if (filtered.length > 0) {
+      console.log(`First filtered task: ${filtered[0].title}`);
+    } else {
+      console.log(`No tasks passed the filter criteria`);
+    }
+    console.log("----------------------------------");
+    return filtered;
   };
 
+  // Add the missing function here
   const getPendingSwapRequests = () => {
-    return swapRequests.filter(
+    console.log("--------- GETTING PENDING SWAP REQUESTS ---------");
+    console.log(`Total swap requests: ${swapRequests.length}`);
+    
+    const pendingRequests = swapRequests.filter(
       (req) => req.requested_to === user?.id && req.status === 'pending'
     );
+    
+    console.log(`Pending swap requests for current user: ${pendingRequests.length}`);
+    if (pendingRequests.length > 0) {
+      console.log("Pending swap requests:", pendingRequests.map(r => r.id).join(', '));
+    }
+    
+    return pendingRequests;
   };
 
-  const renderWeeklyCalendar = () => {
-    return (
-      <View style={styles.weeklyCalendarContainer}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 10 }]}>
-          Weekly Schedule
-        </Text>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={daysOfWeek}
-          keyExtractor={(item) => item.dateStr}
-          renderItem={({ item }) => {
-            const isSelected = selectedDay === item.dateStr;
-
-            const dayTasks = tasks.filter(
-              (task) => task.due_date && task.due_date.split('T')[0] === item.dateStr
-            );
-
-            const myTasks = dayTasks.filter((task) => task.assigned_to === user?.id);
-
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.dayCard,
-                  item.isToday && styles.todayCard,
-                  isSelected && styles.selectedDayCard,
-                  { backgroundColor: isSelected ? theme.colors.primary + '20' : theme.colors.card },
-                ]}
-                onPress={() => setSelectedDay(item.dateStr)}
-              >
-                <Text
-                  style={[
-                    styles.dayName,
-                    isSelected && { color: theme.colors.primary, fontWeight: '700' },
-                  ]}
-                >
-                  {item.name}
-                </Text>
-                <Text
-                  style={[
-                    styles.dayDate,
-                    isSelected && { color: theme.colors.primary },
-                  ]}
-                >
-                  {item.date.getDate()}
-                </Text>
-
-                {myTasks.length > 0 && (
-                  <View
-                    style={[
-                      styles.taskCountBadge,
-                      { backgroundColor: isSelected ? theme.colors.primary : '#FF9855' },
-                    ]}
-                  >
-                    <Text style={styles.taskCountText}>{myTasks.length}</Text>
-                  </View>
-                )}
-
-                {dayTasks.length > 0 && myTasks.length === 0 && (
-                  <View
-                    style={[
-                      styles.allTasksCountBadge,
-                      { backgroundColor: isSelected ? theme.colors.primary + '80' : '#bbb' },
-                    ]}
-                  >
-                    <Text style={styles.taskCountText}>{dayTasks.length}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          }}
-          contentContainerStyle={styles.calendarList}
-        />
-      </View>
-    );
-  };
-
+  // Update renderTasksTab to include additional logging
   const renderTasksTab = () => {
     const filteredTasks = getFilteredTasks();
+    console.log(`renderTasksTab: ${filteredTasks.length} tasks after filtering`);
+    
+    // Log more details about the filtered tasks
+    if (filteredTasks.length > 0) {
+      console.log("Filtered task titles:", filteredTasks.map(t => t.title).join(", "));
+    }
+    
     const pendingSwapRequests = getPendingSwapRequests();
-
-    const selectedDateObj = new Date(selectedDay);
-    const formattedDate = selectedDateObj.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-    });
-
-    const isToday = selectedDateObj.toDateString() === new Date().toDateString();
 
     return (
       <View style={styles.tabContent}>
-        {renderWeeklyCalendar()}
+        {/* Remove renderWeeklyCalendar() call here to remove date selector */}
 
         <View style={styles.selectedDayHeader}>
           <Text style={[styles.selectedDayText, { color: theme.colors.text }]}>
-            {isToday ? "Today's Tasks" : `Tasks for ${formattedDate}`}
+            All Tasks
           </Text>
           <TouchableOpacity
             style={[styles.addTaskButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => {
-              setNewTask((prev) => ({ ...prev, day_of_week: selectedDay }));
               setShowNewTaskModal(true);
             }}
           >
@@ -813,8 +929,8 @@ const TasksScreen: React.FC = () => {
               <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>No tasks to display</Text>
               <Text style={styles.emptyStateSubtext}>
                 {taskFilter === 'mine'
-                  ? `You have no tasks assigned for ${isToday ? 'today' : formattedDate}`
-                  : `No tasks scheduled for ${isToday ? 'today' : formattedDate}`}
+                  ? "You don't have any tasks assigned"
+                  : "No tasks have been created yet"}
               </Text>
             </View>
           ) : (
@@ -839,12 +955,22 @@ const TasksScreen: React.FC = () => {
   };
 
   const renderTaskItem = (task: any) => {
-    // Modify to handle multiple assignees
-    const isMyTask = task.assigned_to && (
-      Array.isArray(task.assigned_to) 
-        ? task.assigned_to.includes(user?.id)
-        : task.assigned_to === user?.id
-    );
+    // Check if task is assigned to current user, handling various assignment formats
+    let isMyTask = false;
+    
+    // Check all possible ways a task can be assigned to the current user
+    if (Array.isArray(task.assigned_to) && task.assigned_to.includes(user?.id)) {
+      isMyTask = true;
+    } else if (task.assigned_to === user?.id) {
+      isMyTask = true;
+    } else if (task.task_assignees && Array.isArray(task.task_assignees) && 
+               task.task_assignees.some((assignee: any) => assignee.user_id === user?.id)) {
+      isMyTask = true;
+    } else if (task.requires_multiple_people && task.created_by === user?.id && !task.assigned_to) {
+      isMyTask = true;
+    }
+    
+    console.log(`Task "${task.title}" isMyTask: ${isMyTask}, assigned_to: ${JSON.stringify(task.assigned_to)}, requires_multiple: ${task.requires_multiple_people}, created_by: ${task.created_by}`);
     
     const isPending = task.status === 'pending';
     const isCompleted = task.status === 'completed';
@@ -860,6 +986,26 @@ const TasksScreen: React.FC = () => {
       const assigneeId = Array.isArray(task.assigned_to) ? task.assigned_to[0] : task.assigned_to;
       const assignedMember = members.find((m) => m.user_id === assigneeId);
       assignedNames = assignedMember ? (assigneeId === user?.id ? 'You' : assignedMember.full_name) : 'Unknown';
+    }
+
+    // If it's a multi-person task without assigned_to, show creator as assignee
+    if (!task.assigned_to && task.requires_multiple_people && task.created_by) {
+      const creatorMember = members.find((m) => m.user_id === task.created_by);
+      assignedNames = creatorMember ? 
+        (task.created_by === user?.id ? 'You - Group Task' : `${creatorMember.full_name} - Group Task`) : 
+        'Group Task';
+    }
+
+    // If task has task_assignees, show relevant information
+    if (task.task_assignees && task.task_assignees.length > 0) {
+      assignedNames = task.task_assignees.map((assignee: any) => {
+        const member = members.find(m => m.user_id === assignee.user_id);
+        return member ? (member.user_id === user?.id ? 'You' : member.full_name) : 'Unknown';
+      }).join(', ');
+      
+      if (task.task_assignees.length > 1) {
+        assignedNames += ' - Group Task';
+      }
     }
 
     const categoryInfo =
@@ -1991,6 +2137,52 @@ const TasksScreen: React.FC = () => {
       </Modal>
     );
   };
+
+  // Add this function right after your getFilteredTasks function to help diagnose the issue
+  const debugTaskAssignments = () => {
+    console.log("========== DEBUG TASK ASSIGNMENTS ==========");
+    if (!tasks || tasks.length === 0) {
+      console.log("No tasks available to debug");
+      return;
+    }
+    
+    tasks.forEach(task => {
+      console.log(`Task: ${task.title} (ID: ${task.id})`);
+      console.log(`  requires_multiple_people: ${task.requires_multiple_people}`);
+      console.log(`  assigned_to: ${JSON.stringify(task.assigned_to)}`);
+      console.log(`  created_by: ${task.created_by}`);
+      console.log(`  task_assignees: ${JSON.stringify(task.task_assignees)}`);
+      
+      // Check if the current user is considered assigned to this task
+      const isAssigned = 
+        (Array.isArray(task.assigned_to) && task.assigned_to.includes(user?.id)) ||
+        (task.assigned_to === user?.id) ||
+        (task.task_assignees && Array.isArray(task.task_assignees) && 
+         task.task_assignees.some(assignee => assignee.user_id === user?.id)) ||
+        (task.requires_multiple_people && task.created_by === user?.id && !task.assigned_to);
+      
+      console.log(`  Current user (${user?.id}) assigned: ${isAssigned}`);
+      
+      // When task should appear in "My Tasks" but doesn't, log detailed reasons
+      if (task.requires_multiple_people && !isAssigned) {
+        console.log("  ISSUE DETECTED: Multi-person task that current user might be assigned to but isn't showing");
+        console.log(`  Do task_assignees exist? ${task.task_assignees ? 'Yes' : 'No'}`);
+        if (task.task_assignees) {
+          console.log(`  task_assignees structure: ${typeof task.task_assignees} with length ${task.task_assignees.length}`);
+          console.log(`  User IDs in task_assignees: ${task.task_assignees.map(a => a.user_id).join(', ')}`);
+        }
+      }
+    });
+    console.log("===========================================");
+  };
+
+  // Call this debug function in useEffect
+  useEffect(() => {
+    if (tasks && tasks.length > 0 && user?.id) {
+      debugTaskAssignments();
+    }
+  }, [tasks, user?.id]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />

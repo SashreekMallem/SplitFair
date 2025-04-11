@@ -259,16 +259,18 @@ export const useTasks = (initialHomeId?: string) => {
     }
 
     try {
-      // Make sure the assigned_to field is properly handled before passing to service
+      // Handle multiple assignees correctly
       const task = await taskService.createTask(
         targetHomeId,
         user.id,
+        // Make sure the assigned_to array is passed properly
         taskData
       );
 
       if (task) {
         // Update the local tasks state with the new task
         setTasks((prevTasks) => [task, ...prevTasks]);
+        showNotification('Success', 'Task created successfully', 'success');
         return task;
       }
       
