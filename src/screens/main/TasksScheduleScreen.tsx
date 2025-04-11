@@ -686,22 +686,25 @@ const TasksScreen: React.FC = () => {
   };
 
   const submitSwapRequest = async () => {
-    if (!taskToSwap || !swapRequest.requestedTo || !swapRequest.proposedDate) {
-      showNotification('Error', 'Please fill in all required fields', 'error');
+    if (!taskToSwap || !swapRequest.requestedTo) {
+      showNotification('Error', 'Please select a person to swap with', 'error');
       return;
     }
 
     try {
+      // Using the original due date for both dates
+      const originalDate = taskToSwap.due_date || '';
       await requestSwap(
         taskToSwap.id,
         swapRequest.requestedTo,
-        taskToSwap.due_date || '',
-        swapRequest.proposedDate,
+        originalDate,
+        originalDate, // Using same date since we removed date selection
         swapRequest.message
       );
 
       setShowSwapRequestModal(false);
       setTaskToSwap(null);
+      showNotification('Success', 'Swap request sent', 'success');
     } catch (error) {
       showNotification('Error', 'Failed to submit swap request', 'error');
     }
@@ -2183,6 +2186,122 @@ const TasksScreen: React.FC = () => {
     }
   }, [tasks, user?.id]);
 
+  const renderSwapRequestModal = () => {
+    if (!taskToSwap) return null;
+  
+    return (
+      <Modal
+        visible={showSwapRequestModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSwapRequestModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Request Task Swap
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSwapRequestModal(false)}
+              >
+                <Ionicons name="close" size={24} color={isDarkMode ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+  
+            <ScrollView style={styles.modalScrollContent}>
+              <View style={styles.swapTaskInfo}>
+                <Text style={[styles.swapTaskTitle, { color: theme.colors.text }]}>
+                  {taskToSwap.title}
+                </Text>
+                <Text style={styles.swapTaskDate}>
+                  Due on: {new Date(taskToSwap.due_date || '').toLocaleDateString()}
+                </Text>
+              </View>
+  
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Request Swap With
+              </Text>
+              <View style={styles.assigneeContainer}>
+                {members.filter(m => m.user_id !== user?.id).map((member) => (
+                  <TouchableOpacity
+                    key={member.user_id}
+                    style={[
+                      styles.assigneeOption,
+                      swapRequest.requestedTo === member.user_id && styles.activeAssigneeOption,
+                      {
+                        backgroundColor: swapRequest.requestedTo === member.user_id
+                          ? '#546DE5'
+                          : 'rgba(150, 150, 150, 0.1)',
+                      },
+                    ]}
+                    onPress={() => setSwapRequest({
+                      ...swapRequest,
+                      requestedTo: member.user_id
+                    })}
+                  >
+                    <UserAvatar
+                      name={member.full_name}
+                      size={30}
+                      isCurrentUser={false}
+                      showBorder={swapRequest.requestedTo === member.user_id}
+                    />
+                    <Text
+                      style={[
+                        styles.assigneeOptionText,
+                        {
+                          color: swapRequest.requestedTo === member.user_id ? '#fff' : theme.colors.text,
+                        },
+                      ]}
+                    >
+                      {member.full_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+  
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Message (Optional)
+              </Text>
+              <TextInput
+                style={[
+                  styles.textAreaInput,
+                  { color: theme.colors.text, borderColor: isDarkMode ? '#333' : '#eee' },
+                ]}
+                placeholder="Add a message to explain your swap request..."
+                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                value={swapRequest.message}
+                onChangeText={(text) => setSwapRequest({ ...swapRequest, message: text })}
+                multiline
+              />
+            </ScrollView>
+  
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalActionButton, styles.cancelButton]}
+                onPress={() => setShowSwapRequestModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionButton,
+                  styles.confirmButton,
+                  !swapRequest.requestedTo && styles.disabledButton,
+                ]}
+                onPress={submitSwapRequest}
+                disabled={!swapRequest.requestedTo}
+              >
+                <Text style={styles.confirmButtonText}>Send Request</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
@@ -2335,6 +2454,7 @@ const TasksScreen: React.FC = () => {
       {renderNewRuleModal()}
       {renderEditRuleModal()}
       {renderEvaluateTaskModal()}
+      {renderSwapRequestModal()} {/* Add this line */}
     </View>
   );
 };
@@ -3311,6 +3431,24 @@ const styles = StyleSheet.create({
     color: '#FF9855',
     marginLeft: 4,
     fontWeight: '500',
+  },
+  swapTaskInfo: {
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    borderRadius: 8,
+  },
+  swapTaskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  swapTaskDate: {
+    fontSize: 14,
+    color: '#999',
+  },
+  dateInputContainer: {
+    marginBottom: 15,
   },
 });
 

@@ -647,7 +647,7 @@ export const respondToSwapRequest = async (
     // Get the swap request first to get related info
     const { data: swapRequest, error: fetchError } = await supabase
       .from('task_swap_requests')
-      .select('*, task:tasks(title, home_id)')
+      .select('*, task:tasks(id, title, home_id, assigned_to, requires_multiple_people)')
       .eq('id', swapRequestId)
       .single();
     
@@ -683,13 +683,51 @@ export const respondToSwapRequest = async (
     
     const requesterName = nameMap[swapRequest.requested_by] || 'A user';
     const responderName = nameMap[swapRequest.requested_to] || 'A user';
-    const taskTitle = (swapRequest.task as any)?.title || 'a task';
-    const homeId = (swapRequest.task as any)?.home_id;
+    const task = swapRequest.task as any;
+    const taskTitle = task?.title || 'a task';
+    const homeId = task?.home_id;
     
     if (accept) {
       // If accepted, swap the task assignments
-      // This is a simplified version - in a real app you might need to handle
-      // more complex swap logic depending on your requirements
+      const taskId = task?.id;
+      if (taskId) {
+        if (task.requires_multiple_people) {
+          // For multi-person tasks, update the task_assignees table
+          // First, find the requester's assignment
+          const { data: requesterAssignment } = await supabase
+            .from('task_assignees')
+            .select('*')
+            .eq('task_id', taskId)
+            .eq('user_id', swapRequest.requested_by)
+            .single();
+          
+          if (requesterAssignment) {
+            // Update the user_id to the new assignee
+            await supabase
+              .from('task_assignees')
+              .update({ user_id: swapRequest.requested_to })
+              .eq('id', requesterAssignment.id);
+          } else {
+            // If no direct assignment found, add a new one
+            await supabase
+              .from('task_assignees')
+              .insert({
+                task_id: taskId,
+                user_id: swapRequest.requested_to,
+                assignment_order: 1
+              });
+          }
+        } else {
+          // For single-person tasks, simply update the assigned_to field
+          await supabase
+            .from('tasks')
+            .update({ 
+              assigned_to: swapRequest.requested_to,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', taskId);
+        }
+      }
       
       // Notify the requester
       await createUserNotification(
@@ -702,9 +740,8 @@ export const respondToSwapRequest = async (
         swapRequest.id
       );
       
-      // You would also typically update task assignments here
     } else {
-      // Notify the requester
+      // Notify the requester about rejection
       await createUserNotification(
         swapRequest.requested_by,
         homeId,
