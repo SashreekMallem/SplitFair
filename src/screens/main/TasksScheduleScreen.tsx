@@ -180,7 +180,6 @@ const TasksScreen: React.FC = () => {
   const [swapRequest, setSwapRequest] = useState({
     requestedTo: '',
     originalDate: '',
-    proposedDate: new Date().toISOString().split('T')[0],
     message: '',
   });
 
@@ -678,7 +677,6 @@ const TasksScreen: React.FC = () => {
       setSwapRequest({
         requestedTo: '',
         originalDate: task.due_date || '',
-        proposedDate: new Date().toISOString().split('T')[0],
         message: '',
       });
       setShowSwapRequestModal(true);
@@ -713,6 +711,16 @@ const TasksScreen: React.FC = () => {
   const handleSwapResponse = async (swapRequestId: string, accept: boolean) => {
     try {
       await respondToSwap(swapRequestId, accept);
+      
+      // Show notification
+      showNotification(
+        accept ? 'Swap Accepted' : 'Swap Declined', 
+        accept ? 'Task has been reassigned to you' : 'Swap request was declined',
+        accept ? 'success' : 'info'
+      );
+      
+      // Refresh tasks immediately to update the UI
+      refreshTasks();
     } catch (error) {
       showNotification('Error', 'Failed to respond to swap request', 'error');
     }
@@ -2295,34 +2303,48 @@ const TasksScreen: React.FC = () => {
               >
                 <Text style={styles.confirmButtonText}>Send Request</Text>
               </TouchableOpacity>
+            </View>styles.container, { backgroundColor: theme.colors.background }]}>
+          </View>' : 'dark'} />
+        </View>
+      </Modal>{[
+                style={[08)',
+                  styles.modalActionButton,109, 229, 0.05)' : 'rgba(84, 109, 229, 0.02)',
+                  styles.confirmButton,ent',
+                  !swapRequest.requestedTo && styles.disabledButton,
+                ]}{ x: 0, y: 0 }}
+                onPress={submitSwapRequest} x: 0, y: 0.6 }}
+                disabled={!swapRequest.requestedTo}  style={styles.headerGradient}
+              >  />
+                <Text style={styles.confirmButtonText}>Send Request</Text>      <View style={styles.islandContainer}>
+              </TouchableOpacity>omeIsland
             </View>
           </View>
-        </View>
-      </Modal>
+        </View>ss={handleIslandAction}
+      </Modal>ion={navigation}
     );
   };
-
-  return (
+,
+  return (  tasks,
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <LinearGradient
-        colors={[
+        colors={[/>
           isDarkMode ? 'rgba(84, 109, 229, 0.15)' : 'rgba(84, 109, 229, 0.08)',
           isDarkMode ? 'rgba(84, 109, 229, 0.05)' : 'rgba(84, 109, 229, 0.02)',
-          'transparent',
-        ]}
+          'transparent',lView}
+        ]}scrollContent}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 0.6 }}
         style={styles.headerGradient}
-      />
-      <View style={styles.islandContainer}>
-        <HomeIsland
-          mode={islandMode}
+      />shing={refreshing}
+      <View style={styles.islandContainer}>Refresh}
+        <HomeIslandlor="#546DE5"
+          mode={islandMode}546DE5']}
           onModeChange={setIslandMode}
           onActionPress={handleIslandAction}
-          navigation={navigation}
-          contextMode="home"
-          data={{
+          navigation={navigation}Scroll={Animated.event(
+          contextMode="home"nativeEvent: { contentOffset: { y: scrollY } } }],
+          data={{tiveDriver: false }
             expenses: [],
             tasks,
             events: [],
@@ -2330,115 +2352,115 @@ const TasksScreen: React.FC = () => {
           }}
         />
       </View>
-      <ScrollView
+      <ScrollViewimation,
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
+        contentContainerStyle={styles.scrollContent}    {
+        showsVerticalScrollIndicator={false}         translateY: headerAnimation.interpolate({
+        refreshControl={0, 1],
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={onRefresh}      },
             tintColor="#546DE5"
-            colors={['#546DE5']}
+            colors={['#546DE5']}     },
           />
         }
         onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],Text style={[styles.headerTitle, { color: theme.colors.text }]}>
           { useNativeDriver: false }
         )}
-        scrollEventThrottle={16}
+        scrollEventThrottle={16} style={styles.headerSubtitle}>
       >
         <Animated.View
           style={[
-            styles.header,
-            {
-              opacity: headerAnimation,
-              transform: [
-                {
-                  translateY: headerAnimation.interpolate({
-                    inputRange: [0, 1],
+            styles.header,enaltyPoints() > 0 && (
+            {style={styles.penaltyBadge}>
+              opacity: headerAnimation,onicons name="alert-circle" size={16} color="#EB4D4B" />
+              transform: [<Text style={styles.penaltyText}>{calculatePenaltyPoints()} penalty points</Text>
+                {</View>
+                  translateY: headerAnimation.interpolate({ )}
+                    inputRange: [0, 1],ed.View>
                     outputRange: [-20, 0],
                   }),
-                },
+                },[
               ],
-            },
-          ]}
+            },activeTabButton,
+          ]}derBottomColor: activeTab === 'tasks' ? theme.colors.primary : 'transparent' },
         >
-          <View>
+          <View>ks')}
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
               Chores & Rules
             </Text>
-            <Text style={styles.headerSubtitle}>
-              Manage household tasks and rules
+            <Text style={styles.headerSubtitle}>{22}
+              Manage household tasks and rules  color={activeTab === 'tasks' ? theme.colors.primary : '#999'}
             </Text>
           </View>
           {calculatePenaltyPoints() > 0 && (
-            <View style={styles.penaltyBadge}>
+            <View style={styles.penaltyBadge}>es.tabButtonText,
               <Ionicons name="alert-circle" size={16} color="#EB4D4B" />
-              <Text style={styles.penaltyText}>{calculatePenaltyPoints()} penalty points</Text>
+              <Text style={styles.penaltyText}>{calculatePenaltyPoints()} penalty points</Text>primary : '#999',
             </View>
-          )}
+          )}  },
         </Animated.View>
-        <View style={styles.tabBar}>
+        <View style={styles.tabBar}> >
           <TouchableOpacity
             style={[
-              styles.tabButton,
+              styles.tabButton,acity>
               activeTab === 'tasks' && styles.activeTabButton,
-              { borderBottomColor: activeTab === 'tasks' ? theme.colors.primary : 'transparent' },
-            ]}
-            onPress={() => setActiveTab('tasks')}
-          >
+              { borderBottomColor: activeTab === 'tasks' ? theme.colors.primary : 'transparent' },yle={[
+            ]}les.tabButton,
+            onPress={() => setActiveTab('tasks')}b === 'rules' && styles.activeTabButton,
+          >tiveTab === 'rules' ? theme.colors.primary : 'transparent' },
             <Ionicons
               name="checkbox-outline"
               size={22}
-              color={activeTab === 'tasks' ? theme.colors.primary : '#999'}
-            />
-            <Text
-              style={[
+              color={activeTab === 'tasks' ? theme.colors.primary : '#999'}ons
+            />me="document-text-outline"
+            <Text size={22}
+              style={[{activeTab === 'rules' ? theme.colors.primary : '#999'}
                 styles.tabButtonText,
                 {
                   color: activeTab === 'tasks' ? theme.colors.primary : '#999',
-                  fontWeight: activeTab === 'tasks' ? '600' : '400',
+                  fontWeight: activeTab === 'tasks' ? '600' : '400',es.tabButtonText,
                 },
-              ]}
+              ]}primary : '#999',
             >
-              Chores
+              Chores  },
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> >
           <TouchableOpacity
             style={[
-              styles.tabButton,
+              styles.tabButton,acity>
               activeTab === 'rules' && styles.activeTabButton,
-              { borderBottomColor: activeTab === 'rules' ? theme.colors.primary : 'transparent' },
-            ]}
-            onPress={() => setActiveTab('rules')}
+              { borderBottomColor: activeTab === 'rules' ? theme.colors.primary : 'transparent' },ted.View
+            ]}[
+            onPress={() => setActiveTab('rules')}ContentContainer,
           >
-            <Ionicons
+            <Ioniconscity: contentAnimation,
               name="document-text-outline"
               size={22}
-              color={activeTab === 'rules' ? theme.colors.primary : '#999'}
-            />
-            <Text
-              style={[
+              color={activeTab === 'rules' ? theme.colors.primary : '#999'}translateY: contentAnimation.interpolate({
+            />    inputRange: [0, 1],
+            <Text       outputRange: [20, 0],
+              style={[),
                 styles.tabButtonText,
                 {
                   color: activeTab === 'rules' ? theme.colors.primary : '#999',
                   fontWeight: activeTab === 'rules' ? '600' : '400',
                 },
-              ]}
-            >
+              ]}erTasksTab() : renderRulesTab()}
+            >mated.View>
               Rules
-            </Text>
-          </TouchableOpacity>
+            </Text>)}
+          </TouchableOpacity>uleModal()}
         </View>
         <Animated.View
-          style={[
+          style={[this line */}
             styles.tabContentContainer,
             {
               opacity: contentAnimation,
               transform: [
-                {
-                  translateY: contentAnimation.interpolate({
+                { = StyleSheet.create({
+                  translateY: contentAnimation.interpolate({er: {
                     inputRange: [0, 1],
                     outputRange: [20, 0],
                   }),
@@ -2448,24 +2470,24 @@ const TasksScreen: React.FC = () => {
           ]}
         >
           {activeTab === 'tasks' ? renderTasksTab() : renderRulesTab()}
-        </Animated.View>
-      </ScrollView>
-      {renderNewTaskModal()}
+        </Animated.View>rollView: {
+      </ScrollView>  flex: 1,
+      {renderNewTaskModal()}  },
       {renderNewRuleModal()}
-      {renderEditRuleModal()}
-      {renderEvaluateTaskModal()}
-      {renderSwapRequestModal()} {/* Add this line */}
+      {renderEditRuleModal()}: Platform.OS === 'ios' ? 130 : 110,
+      {renderEvaluateTaskModal()}orizontal: 20,
+      {renderSwapRequestModal()} {/* Add this line */}paddingBottom: 100,
     </View>
   );
-};
-
-const styles = StyleSheet.create({
+};: 'absolute',
+form.OS === 'ios' ? 10 : 90,
+const styles = StyleSheet.create({,
   container: {
-    flex: 1,
-  },
+    flex: 1,zIndex: 50,
+  }, 'center',
   headerGradient: {
-    position: 'absolute',
-    left: 0,
+    position: 'absolute',ader: {
+    left: 0, 'row',
     right: 0,
     top: 0,
     height: 300,
@@ -2473,389 +2495,389 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
+  scrollContent: {ttom: 6,
     paddingTop: Platform.OS === 'ios' ? 130 : 110,
-    paddingHorizontal: 20,
+    paddingHorizontal: 20,e: {
     paddingBottom: 100,
-  },
+  },color: '#666',
   islandContainer: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 10 : 90,
     left: 0,
-    right: 0,
-    zIndex: 50,
-    alignItems: 'center',
-  },
+    right: 0,'rgba(235, 77, 75, 0.1)',
+    zIndex: 50,paddingVertical: 6,
+    alignItems: 'center',ontal: 10,
+  }, 16,
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'space-between',fontSize: 12,
+    alignItems: 'center',0',
+    marginBottom: 24,4B',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 6,
   },
-  headerSubtitle: {
+  headerSubtitle: {'rgba(150, 150, 150, 0.2)',
     fontSize: 15,
     color: '#666',
-  },
-  penaltyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(235, 77, 75, 0.1)',
-    paddingVertical: 6,
+  },flex: 1,
+  penaltyBadge: {n: 'row',
+    flexDirection: 'row',center',
+    alignItems: 'center',enter',
+    backgroundColor: 'rgba(235, 77, 75, 0.1)',12,
+    paddingVertical: 6,dth: 2,
     paddingHorizontal: 10,
-    borderRadius: 16,
+    borderRadius: 16,Button: {
   },
   penaltyText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#EB4D4B',
+    color: '#EB4D4B',marginLeft: 8,
     marginLeft: 4,
-  },
+  },Container: {
   tabBar: {
     flexDirection: 'row',
     marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(150, 150, 150, 0.2)',
-  },
-  tabButton: {
+  },lterContainer: {
+  tabButton: {row',
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 2,
+    justifyContent: 'center',al: 8,
+    paddingVertical: 12,tal: 16,
+    borderBottomWidth: 2,borderRadius: 20,
   },
   activeTabButton: {
-    borderBottomWidth: 2,
-  },
+    borderBottomWidth: 2,tiveFilterButton: {
+  },olor: '#546DE5',
   tabButtonText: {
-    fontSize: 16,
+    fontSize: 16,lterText: {
     marginLeft: 8,
   },
   tabContentContainer: {
-    flex: 1,
-  },
+    flex: 1,skListContainer: {
+  }, 20,
   tabContent: {
     flex: 1,
-  },
+  },r',
   filterContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row',color: '#999',
     marginBottom: 16,
   },
-  filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 12,
-  },
+  filterButton: {borderRadius: 16,
+    paddingVertical: 8,,
+    paddingHorizontal: 16, 12,
+    borderRadius: 20,',
+    marginRight: 12,shadowOffset: { width: 0, height: 4 },
+  },8,
   activeFilterButton: {
-    backgroundColor: '#546DE5',
+    backgroundColor: '#546DE5',elevation: 3,
   },
   filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+    fontSize: 14,n: 'row',
+    fontWeight: '500',enter',
+  },marginBottom: 12,
   taskListContainer: {
-    marginBottom: 20,
+    marginBottom: 20,{
   },
   loadingText: {
     textAlign: 'center',
     padding: 20,
-    color: '#999',
+    color: '#999',,
   },
   taskCard: {
-    borderRadius: 16,
+    borderRadius: 16,skTitleContainer: {
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.08,fontWeight: '600',
     shadowRadius: 8,
     elevation: 3,
-  },
-  taskHeader: {
+  },Title: {
+  taskHeader: {e: 'line-through',
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-  },
+  },fontSize: 13,
   taskIconContainer: {
-    width: 40,
+    width: 40,p: 2,
     height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 20,Container: {
+    justifyContent: 'center',,
+    alignItems: 'center',r',
     marginRight: 12,
-  },
+  },signeeName: {
   taskTitleContainer: {
     flex: 1,
   },
-  taskTitle: {
+  taskTitle: {textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  completedTaskTitle: {
+    marginBottom: 2, 'row',
+  },,
+  completedTaskTitle: {alignItems: 'center',
     textDecorationLine: 'line-through',
-    color: '#999',
+    color: '#999',: {
   },
-  taskDescription: {
-    fontSize: 13,
-    color: '#999',
+  taskDescription: {alignItems: 'center',
+    fontSize: 13,al: 8,
+    color: '#999',ntal: 12,
     marginTop: 2,
-  },
+  },10,
   taskAssigneeContainer: {
-    marginLeft: 8,
-    alignItems: 'center',
+    marginLeft: 8,mpleteButton: {
+    alignItems: 'center',lor: '#2EAF89',
   },
   assigneeName: {
-    fontSize: 12,
+    fontSize: 12,B731',
     fontWeight: '500',
     marginTop: 4,
-    textAlign: 'center',
+    textAlign: 'center',59B6',
   },
   taskActions: {
     flexDirection: 'row',
-    marginTop: 12,
+    marginTop: 12,',
     alignItems: 'center',
-  },
+  },marginLeft: 6,
   taskActionButton: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    alignItems: 'center',flexDirection: 'row',
+    paddingVertical: 8, 'center',
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 8,mpletedStatusText: {
     marginRight: 10,
   },
-  completeButton: {
+  completeButton: {marginLeft: 4,
     backgroundColor: '#2EAF89',
   },
-  swapButton: {
-    backgroundColor: '#F7B731',
+  swapButton: {w',
+    backgroundColor: '#F7B731',enter',
   },
-  evaluateButton: {
+  evaluateButton: {paddingTop: 12,
     backgroundColor: '#9B59B6',
-  },
+  },(150, 150, 150, 0.2)',
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 14,tationText: {
     fontWeight: '500',
-    color: '#fff',
+    color: '#fff',,
     marginLeft: 6,
   },
-  completedStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  completedStatusContainer: {ctionHeader: {
+    flexDirection: 'row',: 'row',
+    alignItems: 'center',e-between',
   },
-  completedStatusText: {
+  completedStatusText: {12,
     fontSize: 13,
     color: '#2EAF89',
     marginLeft: 4,
-  },
+  },fontWeight: '600',
   rotationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 12,5',
     paddingTop: 12,
-    borderTopWidth: 1,
+    borderTopWidth: 1,ainer: {
     borderTopColor: 'rgba(150, 150, 150, 0.2)',
   },
   rotationText: {
     fontSize: 12,
-    color: '#999',
-    marginLeft: 4,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    color: '#999',padding: 16,
+    marginLeft: 4, 12,
+  },'#000',
+  sectionHeader: {dth: 0, height: 4 },
+    flexDirection: 'row',shadowOpacity: 0.08,
+    justifyContent: 'space-between',s: 8,
     alignItems: 'center',
     marginBottom: 12,
-  },
+  },apRequestInfo: {
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600',apRequestTitle: {
   },
-  seeAllText: {
-    fontSize: 14,
+  seeAllText: {,
+    fontSize: 14,: 4,
     color: '#546DE5',
   },
   swapRequestsContainer: {
     marginBottom: 24,
   },
   swapRequestCard: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 16,apRequestMessage: {
+    padding: 16, 'rgba(150, 150, 150, 0.1)',
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: '#000',padding: 10,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: 8,xt: {
     elevation: 3,
-  },
+  },fontStyle: 'italic',
   swapRequestInfo: {
     marginBottom: 12,
-  },
-  swapRequestTitle: {
+  },ns: {
+  swapRequestTitle: {row',
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
-  },
-  swapRequestDetails: {
-    fontSize: 13,
-    color: '#999',
+  }, 10,
+  swapRequestDetails: {'center',
+    fontSize: 13, 8,
+    color: '#999',marginRight: 10,
     marginBottom: 8,
   },
-  swapRequestMessage: {
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+  swapRequestMessage: {EAF89',
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',,
     borderRadius: 8,
     padding: 10,
-    marginTop: 4,
+    marginTop: 4,a(150, 150, 150, 0.2)',
   },
-  swapRequestMessageText: {
-    fontSize: 14,
+  swapRequestMessageText: {t: {
+    fontSize: 14,: 14,
     fontStyle: 'italic',
     color: '#777',
   },
-  swapRequestActions: {
-    flexDirection: 'row',
-  },
+  swapRequestActions: {r: {
+    flexDirection: 'row',alignItems: 'center',
+  },t: 'center',
   swapActionButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 10,ptyStateText: {
     alignItems: 'center',
     borderRadius: 8,
-    marginRight: 10,
+    marginRight: 10,marginTop: 16,
   },
   acceptButton: {
     backgroundColor: '#2EAF89',
     marginRight: 8,
-  },
+  },color: '#999',
   rejectButton: {
     backgroundColor: 'rgba(150, 150, 150, 0.2)',
   },
   swapActionButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#fff',
+    fontSize: 14,backgroundColor: 'rgba(0,0,0,0.5)',
+    fontWeight: '500', 'center',
+    color: '#fff',center',
   },
   emptyStateContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center',width: '95%',
     padding: 30,
-  },
+  }, 20,
   emptyStateText: {
     fontSize: 16,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 4,
+    fontWeight: '600',shadowOffset: { width: 0, height: 10 },
+    marginTop: 16,: 0.25,
+    marginBottom: 4,dius: 10,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-  },
-  modalOverlay: {
+    color: '#999',n: 'row',
+    textAlign: 'center',justifyContent: 'space-between',
+  },center',
+  modalOverlay: { 15,
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    justifyContent: 'center',,
     alignItems: 'center',
     padding: 20,
   },
   modalContent: {
     width: '95%',
-    maxHeight: '80%',
-    borderRadius: 20,
+    maxHeight: '80%',dalScrollContent: {
+    borderRadius: 20,50,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.25,,
+    shadowRadius: 10,marginTop: 15,
+    elevation: 10,m: 6,
   },
   modalHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row',borderWidth: 1,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
+    alignItems: 'center',ical: 10,
+    marginBottom: 15,paddingHorizontal: 15,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 20,xtAreaInput: {
+    fontWeight: '600',: 1,
+  }, 10,
+  modalCloseButton: {0,
+    padding: 5,tal: 15,
   },
-  modalCloseButton: {
-    padding: 5,
+  modalScrollContent: {minHeight: 100,
+    maxHeight: 450,ertical: 'top',
   },
-  modalScrollContent: {
-    maxHeight: 450,
-  },
-  inputLabel: {
-    fontSize: 14,
+  inputLabel: {: {
+    fontSize: 14,,
     fontWeight: '500',
-    marginTop: 15,
+    marginTop: 15,l: 8,
     marginBottom: 6,
-  },
-  textInput: {
-    borderWidth: 1,
+  },{
+  textInput: {: 8,
+    borderWidth: 1,: 12,
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
+    paddingHorizontal: 15, 8,
+    fontSize: 16,: 'rgba(150, 150, 150, 0.1)',
   },
-  textAreaInput: {
-    borderWidth: 1,
+  textAreaInput: {tiveCategoryOption: {
+    borderWidth: 1,ba(84, 109, 229, 0.2)',
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 10, {
     paddingHorizontal: 15,
-    fontSize: 16,
+    fontSize: 16,fontWeight: '500',
     minHeight: 100,
     textAlignVertical: 'top',
   },
   categoriesContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row', 8,
     flexWrap: 'wrap',
     marginVertical: 8,
-  },
+  },flexDirection: 'row',
   categoryOption: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 12,paddingHorizontal: 12,
     borderRadius: 16,
-    marginRight: 8,
+    marginRight: 8,8,
     marginBottom: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',backgroundColor: 'rgba(150, 150, 150, 0.1)',
   },
   activeCategoryOption: {
-    backgroundColor: 'rgba(84, 109, 229, 0.2)',
+    backgroundColor: 'rgba(84, 109, 229, 0.2)','#546DE5',
   },
-  categoryOptionText: {
+  categoryOptionText: {signeeOptionText: {
     fontSize: 14,
     fontWeight: '500',
   },
   assigneeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 8,
-  },
+    flexDirection: 'row', {
+    flexWrap: 'wrap',ow',
+    marginVertical: 8, 'space-between',
+  },ter',
   assigneeOption: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'center',r: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
+    marginRight: 8,: 'row',
+    marginBottom: 8,pace-between',
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',enter',
+  },paddingVertical: 10,
   activeAssigneeOption: {
-    backgroundColor: '#546DE5',
+    backgroundColor: '#546DE5',gba(150, 150, 150, 0.2)',
   },
   assigneeOptionText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 14,',
+    fontWeight: '500',justifyContent: 'space-between',
     marginLeft: 8,
   },
-  rotationToggleContainer: {
+  rotationToggleContainer: {dalActionButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -2863,107 +2885,107 @@ const styles = StyleSheet.create({
   },
   rotationMembersContainer: {
     marginVertical: 8,
-  },
+  },marginRight: 10,
   rotationMemberRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'center',,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+    borderBottomColor: 'rgba(150, 150, 150, 0.2)', 0.5,
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
+    justifyContent: 'space-between',fontWeight: '500',
+    marginTop: 20,,
   },
-  modalActionButton: {
-    flex: 1,
-    padding: 14,
+  modalActionButton: { {
+    flex: 1,fontSize: 16,
+    padding: 14,00',
     borderRadius: 10,
     alignItems: 'center',
+  },leCategoriesContainer: {
+  cancelButton: {'row',
+    backgroundColor: 'rgba(150, 150, 150, 0.2)',al: 8,
+    marginRight: 10,paddingRight: 16,
   },
-  cancelButton: {
-    backgroundColor: 'rgba(150, 150, 150, 0.2)',
-    marginRight: 10,
+  confirmButton: {utton: {
+    backgroundColor: '#546DE5',w',
+    marginLeft: 10,enter',
+  },paddingVertical: 6,
+  disabledButton: { 10,
+    opacity: 0.5, 16,
   },
-  confirmButton: {
-    backgroundColor: '#546DE5',
-    marginLeft: 10,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  cancelButtonText: {
+  cancelButtonText: {: 'rgba(150, 150, 150, 0.1)',
     fontSize: 16,
     fontWeight: '500',
-    color: '#666',
+    color: '#666',6DE5',
   },
-  confirmButtonText: {
-    fontSize: 16,
+  confirmButtonText: { {
+    fontSize: 16,fontSize: 12,
     fontWeight: '500',
     color: 'white',
   },
   ruleCategoriesContainer: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    paddingRight: 16,
+    paddingVertical: 8,space-between',
+    paddingRight: 16, 16,
   },
-  categoryFilterButton: {
+  categoryFilterButton: {leSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    marginRight: 8,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  activeCategoryFilter: {
+    paddingVertical: 6,borderRadius: 12,
+    paddingHorizontal: 10,',
+    borderRadius: 16,t: 'center',
+    marginRight: 8,',
+    backgroundColor: 'rgba(150, 150, 150, 0.1)',{ width: 0, height: 2 },
+  },shadowOpacity: 0.06,
+  activeCategoryFilter: { 5,
     backgroundColor: '#546DE5',
   },
   categoryFilterText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
+    fontSize: 12,fontSize: 18,
+    fontWeight: '500',',
+    marginLeft: 4,E5',
+  },m: 4,
   rulesSummary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginVertical: 16,
   },
   ruleSummaryCard: {
-    width: '31%',
-    height: 70,
+    width: '31%', {
+    height: 70, 20,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center', 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 2,
-  },
+    shadowOffset: { width: 0, height: 2 },',
+    shadowOpacity: 0.06,00',
+    shadowRadius: 5,shadowOffset: { width: 0, height: 4 },
+    elevation: 2,08,
+  }, 8,
   ruleSummaryNumber: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#546DE5',
-    marginBottom: 4,
-  },
+    fontWeight: '700',leHeader: {
+    color: '#546DE5',w',
+    marginBottom: 4,er',
+  },padding: 16,
   ruleSummaryLabel: {
-    fontSize: 11,
+    fontSize: 11,{
     color: '#999',
     textAlign: 'center',
   },
   ruleListContainer: {
-    marginBottom: 20,
+    marginBottom: 20,ter',
   },
   ruleCard: {
-    borderRadius: 16,
+    borderRadius: 16,leTitleContainer: {
     marginBottom: 12,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },,
+    shadowOpacity: 0.08,fontWeight: '600',
     shadowRadius: 8,
     elevation: 3,
   },
@@ -2971,101 +2993,101 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-  },
+  },padding: 4,
   ruleCategoryBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 36,Buttons: {
+    height: 36,flexDirection: 'row',
+    borderRadius: 18,t: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
+  },marginLeft: 4,
   ruleTitleContainer: {
     flex: 1,
   },
-  ruleTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  ruleTitle: {paddingTop: 0,
+    fontSize: 16,th: 1,
+    fontWeight: '600',lor: 'rgba(150, 150, 150, 0.1)',
     marginBottom: 2,
   },
   ruleInfo: {
     fontSize: 12,
-    color: '#999',
+    color: '#999',marginBottom: 16,
   },
-  ruleActions: {
-    padding: 4,
+  ruleActions: {Status: {
+    padding: 4,16,
   },
-  ruleActionButtons: {
-    flexDirection: 'row',
-    marginRight: 8,
+  ruleActionButtons: {abel: {
+    flexDirection: 'row',,
+    marginRight: 8,00',
   },
   ruleActionButton: {
-    padding: 5,
-    marginLeft: 4,
-  },
+    padding: 5,leAgreementList: {
+    marginLeft: 4,row',
+  },ap',
   ruleDetails: {
-    padding: 16,
-    paddingTop: 0,
-    borderTopWidth: 1,
+    padding: 16, {
+    paddingTop: 0,flexDirection: 'row',
+    borderTopWidth: 1,,
     borderTopColor: 'rgba(150, 150, 150, 0.1)',
-  },
+  },borderRadius: 14,
   ruleDescription: {
-    fontSize: 14,
+    fontSize: 14,ntal: 10,
     lineHeight: 20,
     marginBottom: 16,
   },
-  ruleAgreementStatus: {
+  ruleAgreementStatus: { {
     marginBottom: 16,
-  },
+  },,
   ruleAgreementLabel: {
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 8,
-  },
+  },iner: {
   ruleAgreementList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  ruleAgreementBadge: {
-    flexDirection: 'row',
+  ruleAgreementBadge: {',
+    flexDirection: 'row',marginBottom: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 14,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingVertical: 4,borderRadius: 8,
+    paddingHorizontal: 10,8,
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 8,mmentHeader: {
   },
-  ruleAgreementPerson: {
-    fontSize: 12,
+  ruleAgreementPerson: {space-between',
+    fontSize: 12,marginBottom: 4,
     fontWeight: '500',
-  },
-  ruleCheckIcon: {
-    marginLeft: 4,
+  },ainer: {
+  ruleCheckIcon: {w',
+    marginLeft: 4,ter',
   },
   ruleCommentsContainer: {
-    marginBottom: 16,
-  },
+    marginBottom: 16,,
+  },',
   ruleCommentsTitle: {
-    fontSize: 14,
+    fontSize: 14,mmentTime: {
     fontWeight: '500',
     marginBottom: 8,
   },
   commentItem: {
-    padding: 10,
+    padding: 10,fontSize: 13,
     borderRadius: 8,
     marginBottom: 8,
   },
-  commentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  commentHeader: {flexDirection: 'row',
+    flexDirection: 'row','center',
+    justifyContent: 'space-between', 16,
     marginBottom: 4,
-  },
+  },mmentInput: {
   commentUserContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  commentUser: {
+    flexDirection: 'row',1,
+    alignItems: 'center',20,
+  },paddingVertical: 8,
+  commentUser: {ontal: 12,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -3073,198 +3095,198 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
   },
-  commentText: {
-    fontSize: 13,
-    lineHeight: 18,
+  commentText: {alignItems: 'center',
+    fontSize: 13,t: 'center',
+    lineHeight: 18,ft: 8,
   },
-  addCommentContainer: {
-    flexDirection: 'row',
+  addCommentContainer: {on: {
+    flexDirection: 'row',',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  commentInput: {
+    marginBottom: 16,t: 'center',
+  },l: 10,
+  commentInput: {borderRadius: 8,
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 8,
+    borderWidth: 1,entText: {
+    borderRadius: 20,4,
+    paddingVertical: 8,,
     paddingHorizontal: 12,
     fontSize: 14,
-    maxHeight: 80,
-  },
+    maxHeight: 80,: {
+  },flexDirection: 'row',
   commentButton: {
-    width: 36,
+    width: 36,er',
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 8,eateRuleButtonText: {
   },
   toggleAgreementButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 10,iner: {
     borderRadius: 8,
   },
   toggleAgreementText: {
     fontSize: 14,
     fontWeight: '500',
     marginRight: 6,
-  },
+  },width: 60,
   createRuleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 10,
+    flexDirection: 'row',,
+    alignItems: 'center', 12,
+    justifyContent: 'center',r',
+    paddingVertical: 14,: 'center',
+    borderRadius: 10,padding: 8,
     marginBottom: 20,
-  },
-  createRuleButtonText: {
-    color: '#fff',
+  },idth: 0, height: 1 },
+  createRuleButtonText: {shadowOpacity: 0.1,
+    color: '#fff', 2,
     fontSize: 16,
     fontWeight: '500',
-    marginLeft: 8,
-  },
-  weeklyCalendarContainer: {
+    marginLeft: 8, {
+  },h: 1,
+  weeklyCalendarContainer: {: '#546DE5',
     marginBottom: 20,
   },
-  calendarList: {
+  calendarList: {',
     paddingVertical: 8,
-  },
+  },4,
   dayCard: {
     width: 60,
     height: 80,
-    marginRight: 8,
-    borderRadius: 12,
-    alignItems: 'center',
+    marginRight: 8,',
+    borderRadius: 12,,
+    alignItems: 'center',marginBottom: 5,
     justifyContent: 'center',
     padding: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 1 },fontWeight: '700',
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-  },
-  todayCard: {
-    borderWidth: 1,
+  },solute',
+  todayCard: {bottom: -5,
+    borderWidth: 1,0,
     borderColor: '#546DE5',
   },
-  selectedDayCard: {
-    shadowColor: '#546DE5',
-    shadowOpacity: 0.3,
+  selectedDayCard: {r: '#546DE5',
+    shadowColor: '#546DE5','center',
+    shadowOpacity: 0.3,alignItems: 'center',
     elevation: 4,
-  },
-  dayName: {
+  },dge: {
+  dayName: {e',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500',width: 20,
     color: '#999',
     marginBottom: 5,
-  },
-  dayDate: {
-    fontSize: 18,
+  },olor: '#bbb',
+  dayDate: {tent: 'center',
+    fontSize: 18, 'center',
     fontWeight: '700',
     color: '#666',
   },
   taskCountBadge: {
-    position: 'absolute',
+    position: 'absolute',color: '#fff',
     bottom: -5,
     width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#546DE5',
+    height: 20,on: 'row',
+    borderRadius: 10,tent: 'space-between',
+    backgroundColor: '#546DE5', 'center',
     justifyContent: 'center',
     alignItems: 'center',
   },
   allTasksCountBadge: {
-    position: 'absolute',
+    position: 'absolute',fontWeight: '600',
     bottom: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#bbb',
-    justifyContent: 'center',
+    width: 20,{
+    height: 20,w',
+    borderRadius: 10,enter',
+    backgroundColor: '#bbb',paddingVertical: 6,
+    justifyContent: 'center', 12,
     alignItems: 'center',
   },
   taskCountText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '700',fontWeight: '500',
     color: '#fff',
-  },
+  },,
   selectedDayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row',skHeaderBar: {
+    justifyContent: 'space-between',olute',
     alignItems: 'center',
     marginBottom: 16,
   },
   selectedDayText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
+    fontSize: 18,us: 16,
+    fontWeight: '600',borderTopRightRadius: 16,
+  },idden',
   addTaskButton: {
-    flexDirection: 'row',
+    flexDirection: 'row',or: {
     alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 20,
+    borderRadius: 20,ew: {
   },
   addTaskText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#fff',
+    fontSize: 14,ip: {
+    fontWeight: '500',tion: 'row',
+    color: '#fff',: 'center',
     marginLeft: 4,
   },
   taskHeaderBar: {
-    position: 'absolute',
+    position: 'absolute',marginRight: 8,
     top: 0,
-    left: 0,
+    left: 0,r: 'rgba(150, 150, 150, 0.2)',
     right: 0,
-    height: 6,
+    height: 6,tegoryChipText: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
-  },
+  },: {
   categoryColorIndicator: {
     height: 6,
     width: '100%',
-  },
+  },ba(150, 150, 150, 0.2)',
   categoryScrollView: {
-    marginVertical: 10,
-  },
+    marginVertical: 10,r: {
+  },'row',
   categoryChip: {
-    flexDirection: 'row',
+    flexDirection: 'row',marginVertical: 8,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(150, 150, 150, 0.2)',
+    paddingHorizontal: 12,: {
+    paddingVertical: 8,l: 8,
+    borderRadius: 20,paddingHorizontal: 12,
+    marginRight: 8,,
+    borderWidth: 1,,
+    borderColor: 'rgba(150, 150, 150, 0.2)',,
   },
   categoryChipText: {
-    fontSize: 14,
+    fontSize: 14,backgroundColor: '#546DE5',
     marginLeft: 6,
   },
   rotationSection: {
     marginTop: 15,
     paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(150, 150, 150, 0.2)',
+    borderTopWidth: 1,: {
+    borderTopColor: 'rgba(150, 150, 150, 0.2)',',
   },
   frequencyContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 8,
+    flexDirection: 'row',iner: {
+    flexWrap: 'wrap',row',
+    marginVertical: 8,flexWrap: 'wrap',
   },
   frequencyOption: {
-    paddingVertical: 8,
+    paddingVertical: 8,nsequenceOption: {
     paddingHorizontal: 12,
-    borderRadius: 20,
+    borderRadius: 20,ntal: 12,
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 8,marginRight: 8,
   },
   activeFrequencyOption: {
-    backgroundColor: '#546DE5',
-  },
+    backgroundColor: '#546DE5',: {
+  },backgroundColor: '#546DE5',
   frequencyOptionText: {
     fontSize: 14,
     fontWeight: '500',
@@ -3273,178 +3295,164 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  consequencesContainer: {
-    flexDirection: 'row',
+  consequencesContainer: { 'rgba(150, 150, 150, 0.1)',
+    flexDirection: 'row',,
     flexWrap: 'wrap',
-    marginVertical: 8,
+    marginVertical: 8,aluateTaskTitle: {
   },
   consequenceOption: {
-    paddingVertical: 8,
+    paddingVertical: 8,marginBottom: 4,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 8,title: {
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 8,color: '#999',
   },
-  activeConsequenceOption: {
-    backgroundColor: '#546DE5',
+  activeConsequenceOption: {{
+    backgroundColor: '#546DE5',n: 'row',
   },
-  consequenceText: {
-    fontSize: 14,
+  consequenceText: {10,
+    fontSize: 14,justifyContent: 'space-between',
     fontWeight: '500',
-  },
+  },n: {
   evaluateTaskInfo: {
-    marginBottom: 15,
-    padding: 10,
+    marginBottom: 15,ter',
+    padding: 10,justifyContent: 'center',
     backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderRadius: 8,
-  },
-  evaluateTaskTitle: {
-    fontSize: 16,
+    borderRadius: 8, 10,
+  },8,
+  evaluateTaskTitle: {borderWidth: 1,
+    fontSize: 16,(150, 150, 150, 0.2)',
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 4,t: {
   },
   evaluateTaskSubtitle: {
-    fontSize: 14,
+    fontSize: 14,color: '#999',
     color: '#999',
   },
   evaluationOptions: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'wrap',,
     marginVertical: 10,
-    justifyContent: 'space-between',
-  },
+    justifyContent: 'space-between',ontainer: {
+  },'row',
   evaluationOption: {
-    width: '48%',
+    width: '48%',justifyContent: 'space-between',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    marginBottom: 10,
+    padding: 12,or: 'rgba(235, 77, 75, 0.1)',
+    marginBottom: 10,8,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(150, 150, 150, 0.2)',
+    borderWidth: 1,iner: {
+    borderColor: 'rgba(150, 150, 150, 0.2)',: 'row',
   },
-  evaluationOptionText: {
+  evaluationOptionText: {l: 8,
     marginTop: 8,
     fontSize: 14,
     color: '#999',
-  },
+  },,
   penaltyText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
+    fontSize: 12,,
+    fontWeight: '600',: 8,
+    marginTop: 4,',
   },
-  consequenceToggleContainer: {
-    flexDirection: 'row',
+  consequenceToggleContainer: {tiveDayOption: {
+    flexDirection: 'row',546DE5',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 15,
-    padding: 10,
-    backgroundColor: 'rgba(235, 77, 75, 0.1)',
+    padding: 10,fontWeight: '500',
+    backgroundColor: 'rgba(235, 77, 75, 0.1)',66',
     borderRadius: 8,
   },
-  dayOfWeekContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  dayOfWeekContainer: {ow',
+    flexDirection: 'row',',
+    flexWrap: 'wrap',8,
     marginVertical: 8,
-  },
-  dayOption: {
+  },meSlotOption: {
+  dayOption: { 8,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: 12,borderRadius: 20,
+    borderRadius: 20,,
+    marginRight: 8, 8,
+    marginBottom: 8,rgba(150, 150, 150, 0.1)',
     backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  activeDayOption: {
+  },tiveTimeSlotOption: {
+  activeDayOption: {#546DE5',
     backgroundColor: '#546DE5',
   },
   dayOptionText: {
-    fontSize: 14,
+    fontSize: 14,fontWeight: '500',
     fontWeight: '500',
     color: '#666',
   },
-  timeSlotContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  timeSlotContainer: {ow',
+    flexDirection: 'row',nter',
+    flexWrap: 'wrap', 'rgba(255, 152, 85, 0.1)',
     marginVertical: 8,
-  },
+  },paddingHorizontal: 12,
   timeSlotOption: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 20,
+    borderRadius: 20,eText: {
     marginRight: 8,
     marginBottom: 8,
     backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
+  },flex: 1,
   activeTimeSlotOption: {
-    backgroundColor: '#546DE5',
+    backgroundColor: '#546DE5',{
   },
   timeSlotText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-  },
-  multipleAssigneeInfo: {
+    fontWeight: '500',',
+    color: '#666','center',
+  },er',
+  multipleAssigneeInfo: {position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 152, 85, 0.1)',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingVertical: 8,Number: {
+    paddingHorizontal: 12,: 10,
+    borderRadius: 8,fontWeight: 'bold',
     marginBottom: 10,
   },
-  multipleAssigneeText: {
-    fontSize: 12,
+  multipleAssigneeText: {redBadge: {
+    fontSize: 12,row',
     color: '#FF9855',
-    marginLeft: 6,
+    marginLeft: 6,5, 152, 85, 0.1)',
     flex: 1,
   },
-  assigneeSelectedBadge: {
-    width: 18,
-    height: 18,
+  assigneeSelectedBadge: {adius: 12,
+    width: 18,: 'flex-start',
+    height: 18,marginTop: 8,
     borderRadius: 9,
     backgroundColor: '#fff',
-    justifyContent: 'center',
+    justifyContent: 'center', {
     alignItems: 'center',
-    position: 'absolute',
+    position: 'absolute',color: '#FF9855',
     top: 4,
     right: 4,
   },
   assigneeSelectedNumber: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#546DE5',
+    color: '#546DE5','rgba(150, 150, 150, 0.1)',
   },
   multipleRequiredBadge: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'center',fontSize: 16,
     backgroundColor: 'rgba(255, 152, 85, 0.1)',
-    paddingVertical: 4,
+    paddingVertical: 4, 4,
     paddingHorizontal: 8,
     borderRadius: 12,
     alignSelf: 'flex-start',
-    marginTop: 8,
+    marginTop: 8,color: '#999',
     marginBottom: 4,
-  },
-  multipleRequiredText: {
+  }, {
+  multipleRequiredText: {: 15,
     fontSize: 12,
     color: '#FF9855',
     marginLeft: 4,
-    fontWeight: '500',
-  },
-  swapTaskInfo: {
-    marginBottom: 15,
-    padding: 10,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    borderRadius: 8,
-  },
-  swapTaskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  swapTaskDate: {
-    fontSize: 14,
+    fontWeight: '500',ksScreen;  },  swapTaskInfo: {    marginBottom: 15,    padding: 10,    backgroundColor: 'rgba(150, 150, 150, 0.1)',    borderRadius: 8,  },  swapTaskTitle: {    fontSize: 16,    fontWeight: '600',    marginBottom: 4,  },  swapTaskDate: {    fontSize: 14,
     color: '#999',
   },
   dateInputContainer: {
